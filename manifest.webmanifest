@@ -1,0 +1,23 @@
+{
+  "name": "雪王拼豆 · 拼豆图纸生成器",
+  "short_name": "雪王拼豆",
+  "description": "把图片转成拼豆图纸：MARD 真实色卡取色、限色聚类、像素块色号标识、单色高亮、用豆清单与库存管理、导出可打印图纸。纯前端，离线可用。",
+  "lang": "zh-CN",
+  "dir": "ltr",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0b0e14",
+  "theme_color": "#E5272E",
+  "categories": ["design", "graphics", "utilities", "productivity"],
+  "icons": [
+    { "src": "./assets/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "./assets/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "./assets/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
+    { "src": "./assets/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ],
+  "shortcuts": [
+    { "name": "新建图纸", "short_name": "新建", "url": "./index.html?action=new" }
+  ]
+}

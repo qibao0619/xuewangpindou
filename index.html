@@ -1,0 +1,263 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>雪王拼豆 · 图片转拼豆图纸</title>
+<meta name="description" content="把图片转成拼豆图纸：MARD 真实色卡、限色聚类、像素色号标识、单色高亮、用豆清单与库存管理、导出可打印图纸。纯前端，可离线使用。">
+<meta name="theme-color" content="#E5272E">
+<meta name="color-scheme" content="dark">
+<!-- 装到手机桌面：PWA -->
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32.png">
+<link rel="icon" type="image/svg+xml" href="assets/icon.svg">
+<link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="雪王拼豆">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <img class="logo" src="assets/icon.svg" alt="雪王拼豆" width="38" height="38">
+    <div>
+      <h1>雪王拼豆</h1>
+      <p>图片 → 拼豆图纸 · 像素网格编辑 · 用豆清单</p>
+    </div>
+  </div>
+  <div class="topbar-actions">
+    <button id="btnNew" class="btn" title="清空当前作品">新建</button>
+    <button id="btnOpenProject" class="btn">导入项目</button>
+    <button id="btnSaveProject" class="btn">导出项目</button>
+    <input id="projectFile" type="file" accept=".json,application/json" hidden>
+    <span class="sep"></span>
+    <button id="btnExportPng" class="btn primary">导出图纸 PNG</button>
+    <button id="btnPrint" class="btn">打印 / 存为 PDF</button>
+  </div>
+</header>
+
+<main>
+  <aside class="panel">
+
+    <details class="sect" open>
+      <summary>1. 图片转图纸</summary>
+      <div class="sect-body">
+        <div id="dropZone" class="dropzone">
+          <div class="dz-icon">IMG</div>
+          <div class="dz-text">把图片拖到这里，或<label class="link">点击选择<input id="imageFile" type="file" accept="image/*" hidden></label></div>
+          <div id="imgName" class="dz-name">尚未选择图片</div>
+          <canvas id="imgPreview" class="dz-preview" width="160" height="90"></canvas>
+        </div>
+
+        <div class="row">
+          <label class="lbl">宽度（格）</label>
+          <input id="gridW" class="input num" type="number" min="4" max="400" step="1" value="48">
+          <label class="lbl">高度（格）</label>
+          <input id="gridH" class="input num" type="number" min="4" max="400" step="1" value="48">
+        </div>
+        <label class="check"><input id="keepRatio" type="checkbox" checked> 锁定原图比例（改宽度自动算高度）</label>
+        <div class="row wrap">
+          <button class="btn tiny" data-preset="29">一块板 29×29</button>
+          <button class="btn tiny" data-preset="58">四块板 58×58</button>
+          <button class="btn tiny" data-preset="87">九块板 87×87</button>
+        </div>
+        <div class="row">
+          <label class="lbl">最多颜色数</label>
+          <input id="maxColors" class="input num" type="number" min="0" max="999" step="1" value="0">
+          <span class="hint">0 = 不限（合并相近色，见 README）</span>
+        </div>
+
+        <div class="row wrap">
+          <button id="btnGenerate" class="btn primary block">生成图纸</button>
+          <button id="btnDemo" class="btn tiny">示例图案</button>
+        </div>
+
+        <details class="sub">
+          <summary>更多生成选项（豆径 / 抖动 / 透明 / 去背景）</summary>
+          <div class="row" style="margin-top:6px">
+            <label class="lbl">豆径</label>
+            <select id="beadMM" class="input num">
+              <option value="5">5 mm 标准豆</option>
+              <option value="2.6">2.6 mm 迷你豆</option>
+              <option value="10">10 mm 大号豆</option>
+            </select>
+            <span class="hint">只影响成品尺寸与分板线参考</span>
+          </div>
+          <label class="check"><input id="keepAlpha" type="checkbox"> 保留透明背景（透明的格子留空）</label>
+          <label class="check"><input id="dropBg" type="checkbox"> 去掉四周背景（只留主体，人物中间的连接部分保留）</label>
+          <label class="check"><input id="dither" type="checkbox"> 抖动（渐变更顺滑，图案更碎）</label>
+          <div class="slider">
+            <span>透明阈值</span><input id="alphaThreshold" type="range" min="0" max="255" value="16"><b id="alphaVal">16</b>
+          </div>
+          <div class="row">
+            <label class="lbl">成品尺寸</label>
+            <span class="hint" id="beadSizeHint">—</span>
+          </div>
+        </details>
+
+        <details class="sub">
+          <summary>画面调整（亮度 / 对比度 / 饱和度）</summary>
+          <div class="slider">
+            <span>亮度</span><input id="brightness" type="range" min="50" max="150" value="100"><b id="brightnessVal">100%</b>
+          </div>
+          <div class="slider">
+            <span>对比度</span><input id="contrast" type="range" min="50" max="200" value="100"><b id="contrastVal">100%</b>
+          </div>
+          <div class="slider">
+            <span>饱和度</span><input id="saturation" type="range" min="0" max="200" value="100"><b id="saturationVal">100%</b>
+          </div>
+        </details>
+      </div>
+    </details>
+
+    <details class="sect" open>
+      <summary>2. 色卡 / 拼豆色号</summary>
+      <div class="sect-body">
+        <select id="paletteSelect" class="input"></select>
+        <input id="swatchFilter" class="input" type="search" placeholder="筛选色号 / 颜色名（A01、浅黄、#FAF4C8）" spellcheck="false">
+        <div id="swatches" class="swatches"></div>
+        <div class="row">
+          <span class="hint" id="swatchCount">—</span>
+          <span class="hint" style="margin-left:auto">点色块即选为画笔色</span>
+        </div>
+        <div class="hint" id="paletteNote" hidden></div>
+        <div class="row wrap">
+          <label class="btn tiny">导入色卡<input id="paletteFile" type="file" accept=".json,.txt,.csv,.tsv" hidden></label>
+          <button id="btnExportPalette" class="btn tiny">导出色卡</button>
+          <button id="btnResetPalette" class="btn tiny">重置自定义</button>
+        </div>
+        <details class="sub">
+          <summary>自定义 / 编辑色卡（色号,HEX,名称 每行一条）</summary>
+          <textarea id="customPaletteText" class="input mono" rows="6" spellcheck="false" placeholder="A01,#FFFFFF,白&#10;A02,#111111,黑&#10;A03,#E03A2F,大红"></textarea>
+          <button id="btnApplyPalette" class="btn tiny block">应用为当前色卡</button>
+        </details>
+      </div>
+    </details>
+
+    <details class="sect" open>
+      <summary>3. 显示 / 编辑</summary>
+      <div class="sect-body">
+        <label class="check"><input id="optCodes" type="checkbox" checked> 格子里显示色号（如 M09 / H02，格子太小自动省略）</label>
+        <label class="check"><input id="optHighlight" type="checkbox"> 高亮当前色（其余颜色压暗；也可直接点用豆清单里的行）</label>
+        <label class="check"><input id="optGridLines" type="checkbox" checked> 显示网格线</label>
+        <label class="check"><input id="optBoardGuides" type="checkbox" checked> 显示拼豆板分板线（每 29 格）</label>
+
+        <details class="sub">
+          <summary>编辑工具（笔刷 / 变换 / 去背景）</summary>
+          <div class="row" style="margin-top:6px">
+            <label class="lbl">笔刷</label>
+            <select id="brushSize" class="input num">
+              <option value="1">1×1</option>
+              <option value="2">2×2</option>
+              <option value="3">3×3</option>
+              <option value="4">4×4</option>
+            </select>
+            <span class="hint">当前颜色 <i id="colorChip" class="chip"></i> <span id="colorCode">—</span></span>
+          </div>
+          <div class="row wrap">
+            <button id="btnRotate" class="btn tiny">旋转 90°</button>
+            <button id="btnFlipH" class="btn tiny">水平翻转</button>
+            <button id="btnFlipV" class="btn tiny">垂直翻转</button>
+            <button id="btnTrim" class="btn tiny" title="把四周没有豆子的空行空列裁掉">裁掉空白边</button>
+            <button id="btnDropBg" class="btn tiny" title="从四边识别背景色并清成空格，只留主体；中间连接部分保留">去四周背景</button>
+          </div>
+          <p class="hint">这些操作要先切到「编辑」模式。</p>
+        </details>
+      </div>
+    </details>
+
+    <details class="sect" open>
+      <summary>4. 用豆清单 / 库存</summary>
+      <div class="sect-body">
+        <div class="stat-line">
+          <span>总豆数 <b id="totalBeads">0</b></span>
+          <span>配色 <b id="totalColors">0</b></span>
+          <span>缺货 <b id="shortageCount">0</b></span>
+        </div>
+        <label class="check"><input id="stockOnly" type="checkbox"> 只显示库存不足的颜色</label>
+        <div class="hint" style="margin:-2px 0 6px">点清单里的任意一行 = 选中该色并在图纸上高亮它的位置（再点一次取消）</div>
+        <div class="table-wrap">
+          <table class="counts">
+            <thead><tr><th>色</th><th>色号</th><th>数量</th><th>库存</th><th>差额</th></tr></thead>
+            <tbody id="countsBody"></tbody>
+          </table>
+        </div>
+        <div class="row wrap">
+          <button id="btnExportCsv" class="btn tiny">导出清单 CSV</button>
+          <button id="btnClearStock" class="btn tiny">清空库存</button>
+        </div>
+      </div>
+    </details>
+
+    <details class="sect">
+      <summary>5. 项目存取</summary>
+      <div class="sect-body">
+        <p class="hint" id="saveState">自动保存：等待编辑…</p>
+        <p class="hint">项目文件（.json）里同时包含图案、色卡和库存，换电脑打开也能继续改。</p>
+      </div>
+    </details>
+
+  </aside>
+
+  <section class="stage">
+    <div class="stage-toolbar">
+      <button id="btnSidebar" class="btn tiny sidebar-toggle" title="展开/收起侧边栏" aria-label="展开或收起侧边栏" aria-expanded="false">菜单</button>
+      <div class="mode-switch" role="group" aria-label="模式切换">
+        <button id="modePreview" class="btn tiny" title="预览：只看不改，不会误触" aria-pressed="true">预览</button>
+        <button id="modeEdit" class="btn tiny" title="编辑：可以画、擦、填色、旋转" aria-pressed="false">编辑</button>
+      </div>
+      <span class="sep"></span>
+      <div class="tools">
+        <button class="btn tiny" data-tool="brush" title="画笔 (B)">画笔 B</button>
+        <button class="btn tiny" data-tool="eraser" title="橡皮 (E)">橡皮 E</button>
+        <button class="btn tiny" data-tool="picker" title="吸管 (I)">吸管 I</button>
+        <button class="btn tiny" data-tool="fill" title="填充 (G)">填充 G</button>
+      </div>
+      <span class="sep edit-only"></span>
+      <button id="btnUndo" class="btn tiny edit-only" title="撤销 (Ctrl+Z)">撤销</button>
+      <button id="btnRedo" class="btn tiny edit-only" title="重做 (Ctrl+Y)">重做</button>
+      <button id="btnClear" class="btn tiny edit-only" title="清空画布">清空</button>
+      <span class="sep"></span>
+      <button id="zoomOut" class="btn tiny" title="缩小">-</button>
+      <button id="zoomFit" class="btn tiny" title="适配窗口 (0)">适配</button>
+      <button id="zoomIn" class="btn tiny" title="放大">+</button>
+      <span id="zoomLabel" class="zoom-label">—</span>
+      <button id="btnExportPng2" class="btn tiny primary push-right">导出 PNG</button>
+    </div>
+    <div class="canvas-wrap" id="canvasWrap">
+      <canvas id="grid"></canvas>
+    </div>
+    <div class="statusbar">
+      <span id="statusMode" class="mode-badge">预览模式</span>
+      <span id="statusCell">格：—</span>
+      <span id="statusColor">色：—</span>
+      <span id="statusSize">尺寸：—</span>
+      <span id="statusHint" class="hint">拖拽/滚轮可缩放平移 · 点用豆清单里的行可高亮该颜色</span>
+    </div>
+  </section>
+</main>
+
+<div id="scrim" class="scrim" hidden></div>
+<div id="toastHost" class="toast-host"></div>
+<div id="printSheet" class="print-sheet" aria-hidden="true"></div>
+
+<script src="js/palettes/mard.js"></script>
+<script src="js/palette.js"></script>
+<script src="js/engine.js"></script>
+<script src="js/editor.js"></script>
+<script src="js/exporter.js"></script>
+<script src="js/app.js"></script>
+<script>
+// 注册 Service Worker：装到手机桌面后可离线打开。
+// file:// 直接打开时 SW 不可用属正常（那种情况下页面本身照样能跑）。
+if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js').catch(() => { /* 离线能力不可用不影响主功能 */ });
+  });
+}
+</script>
+</body>
+</html>

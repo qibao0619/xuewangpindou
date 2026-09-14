@@ -1,0 +1,50 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="雪王拼豆图标">
+  <title>雪王拼豆</title>
+  <!-- 背景：蜜雪冰城红 -->
+  <rect width="512" height="512" rx="112" fill="#E5272E"/>
+  <!-- 拼豆格纹底：呼应拼豆主题 -->
+  <g opacity=".13" fill="#fff">
+    <rect x="64" y="64" width="24" height="24" rx="6"/>
+    <rect x="152" y="64" width="24" height="24" rx="6"/>
+    <rect x="240" y="64" width="24" height="24" rx="6"/>
+    <rect x="328" y="64" width="24" height="24" rx="6"/>
+    <rect x="416" y="64" width="24" height="24" rx="6"/>
+    <rect x="64" y="424" width="24" height="24" rx="6"/>
+    <rect x="152" y="424" width="24" height="24" rx="6"/>
+    <rect x="240" y="424" width="24" height="24" rx="6"/>
+    <rect x="328" y="424" width="24" height="24" rx="6"/>
+    <rect x="416" y="424" width="24" height="24" rx="6"/>
+    <rect x="64" y="152" width="24" height="24" rx="6"/>
+    <rect x="64" y="240" width="24" height="24" rx="6"/>
+    <rect x="64" y="328" width="24" height="24" rx="6"/>
+    <rect x="416" y="152" width="24" height="24" rx="6"/>
+    <rect x="416" y="240" width="24" height="24" rx="6"/>
+    <rect x="416" y="328" width="24" height="24" rx="6"/>
+  </g>
+
+  <!-- 王冠 -->
+  <path d="M148 150 L188 108 L226 158 L256 96 L286 158 L324 108 L364 150 L360 190 L152 190 Z"
+        fill="#FFD84D" stroke="#8A5A16" stroke-width="9" stroke-linejoin="round"/>
+  <circle cx="256" cy="88" r="15" fill="#FFF3B0" stroke="#8A5A16" stroke-width="8"/>
+  <circle cx="188" cy="104" r="12" fill="#FFF3B0" stroke="#8A5A16" stroke-width="8"/>
+  <circle cx="324" cy="104" r="12" fill="#FFF3B0" stroke="#8A5A16" stroke-width="8"/>
+
+  <!-- 雪人头（含耳朵/雪堆轮廓） -->
+  <circle cx="256" cy="278" r="126" fill="#FFFFFF" stroke="#2A2A2A" stroke-width="11"/>
+  <!-- 眼睛 -->
+  <circle cx="212" cy="256" r="17" fill="#2A2A2A"/>
+  <circle cx="300" cy="256" r="17" fill="#2A2A2A"/>
+  <circle cx="218" cy="249" r="6" fill="#fff"/>
+  <circle cx="306" cy="249" r="6" fill="#fff"/>
+  <!-- 腮红 -->
+  <ellipse cx="186" cy="300" rx="22" ry="15" fill="#FF9AA2" opacity=".85"/>
+  <ellipse cx="326" cy="300" rx="22" ry="15" fill="#FF9AA2" opacity=".85"/>
+  <!-- 胡萝卜鼻子 -->
+  <path d="M256 276 L318 300 L256 316 Z" fill="#FF8A21" stroke="#8A4A06" stroke-width="8" stroke-linejoin="round"/>
+  <!-- 微笑 -->
+  <path d="M214 334 Q256 372 298 334" fill="none" stroke="#2A2A2A" stroke-width="11" stroke-linecap="round"/>
+
+  <!-- 红围巾 -->
+  <path d="M150 372 Q256 416 362 372 L366 410 Q256 458 146 410 Z" fill="#C81E24" stroke="#7A0F14" stroke-width="9" stroke-linejoin="round"/>
+  <path d="M330 400 L368 470 L318 470 L300 408 Z" fill="#C81E24" stroke="#7A0F14" stroke-width="9" stroke-linejoin="round"/>
+</svg>
