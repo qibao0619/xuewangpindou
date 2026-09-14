@@ -55,12 +55,84 @@
       cv.addEventListener('pointercancel', (e) => this._up(e));
       cv.addEventListener('wheel', (e) => this._wheel(e), { passive: false });
       cv.addEventListener('contextmenu', (e) => e.preventDefault());
+      // 手机上双指缩放要拦掉浏览器的默认手势（否则会缩放整个页面）
+      cv.addEventListener('touchstart', (e) => { if (e.touches.length >= 2) e.preventDefault(); }, { passive: false });
+      cv.addEventListener('touchmove', (e) => { if (e.touches.length >= 2) e.preventDefault(); }, { passive: false });
       window.addEventListener('keydown', (e) => {
         if (e.code === 'Space' && !isTyping(e)) { this.spaceDown = true; e.preventDefault(); this._cursor(); }
       });
       window.addEventListener('keyup', (e) => {
         if (e.code === 'Space') { this.spaceDown = false; this._cursor(); }
       });
+    }
+
+    /* ---------- 双指缩放 / 平移 ---------- */
+
+    /** 记录按在画布上的手指，两根手指进来时切成手势模式 */
+    _trackPointer(e) {
+      if (!this._touches) this._touches = new Map();
+      this._touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    }
+
+    _untrackPointer(e) {
+      if (this._touches) this._touches.delete(e.pointerId);
+    }
+
+    /** 两根手指：按两指距离缩放，按两指中点平移。
+     *  只认最先按下的两根，多出来的手指不影响手势（三指乱按也不会跳）。 */
+    _gesture() {
+      const ids = this._gestureIds;
+      const t = this._touches;
+      if (!ids || !t || ids.length < 2) return null;
+      const a = t.get(ids[0]), b = t.get(ids[1]);
+      if (!a || !b) return null;
+      return {
+        dist: Math.hypot(a.x - b.x, a.y - b.y) || 1,
+        cx: (a.x + b.x) / 2,
+        cy: (a.y + b.y) / 2,
+      };
+    }
+
+    /** 手势开始：记下初始状态，之后按增量算 */
+    _beginGesture() {
+      const t = this._touches;
+      if (!t || t.size < 2) return;
+      // 锁定这一轮手势用的两根手指
+      const ids = [...t.keys()].slice(0, 2);
+      this._gestureIds = ids;
+      const g = this._gesture();
+      if (!g) return;
+      this._pinch = { dist: g.dist, cx: g.cx, cy: g.cy, zoom: this.view.zoom, ox: this.view.ox, oy: this.view.oy };
+      this._gestureUsed = true;  // 本次触摸序列用过双指：抬手前不再画
+      this.panning = null;      // 双指期间不做单指平移
+      this.dragging = null;
+      this.pendingCell = null;  // 暂存的那一格直接丢掉，避免误画
+      this._changes = null;
+      this._cursor();
+    }
+
+    _applyGesture() {
+      if (!this._pinch) return;
+      const g = this._gesture();
+      if (!g) return;
+      const rect = this.canvas.getBoundingClientRect();
+      const p = this._pinch;
+      // 缩放：以两指中点为锚点，缩放的取整规则与滚轮一致
+      const k = g.dist / p.dist;
+      let z = p.zoom * k;
+      z = z >= 2 ? Math.round(z) : Math.round(z * 4) / 4;
+      z = C.clamp(z, 0.4, 40);
+      const real = z / p.zoom;
+      const ax = p.cx - rect.left, ay = p.cy - rect.top;
+      this.view.zoom = z;
+      this.view.ox = ax - (ax - p.ox) * real;
+      this.view.oy = ay - (ay - p.oy) * real;
+      // 平移：两指中点移动了多少
+      this.view.ox += g.cx - p.cx;
+      this.view.oy += g.cy - p.cy;
+      this.clampView();
+      this.requestRender();
+      if (this.onZoom) this.onZoom(this.view.zoom);
     }
 
     _cursor() {
@@ -74,12 +146,16 @@
     setPreview(on) {
       this.preview = !!on;
       this.dragging = null;
+      this.pendingCell = null;
       this._changes = null;
       this._cursor();
       this.requestRender();
     }
 
     _down(e) {
+      this._trackPointer(e);
+      // 第二根手指按下 → 进入双指缩放/平移
+      if (this._touches.size >= 2) { this._beginGesture(); e.preventDefault(); return; }
       const pan = e.button === 1 || e.button === 2 || this.spaceDown;
       if (pan) {
         try { this.canvas.setPointerCapture(e.pointerId); } catch (_) { /* ignore */ }
@@ -89,6 +165,8 @@
         return;
       }
       if (e.button !== 0) return;
+      // 这一轮触摸用过双指：剩下的手指不再触发绘制
+      if (this._gestureUsed) return;
       // 预览模式：按下去也只允许平移，绝不改图（避免手一滑就画上去）
       if (this.preview) {
         try { this.canvas.setPointerCapture(e.pointerId); } catch (_) { /* ignore */ }
@@ -102,12 +180,30 @@
       if (this.tool === 'picker') { this._pick(cell.r, cell.c); return; }
       if (!this.palette) return;
       this._changes = [];
-      this._applyAt(cell.r, cell.c);
+      // 触屏上先不要立刻落笔：万一马上来了第二根手指，这一下就成了误画的点。
+      // 鼠标/触控笔没有这个问题，照旧立即落笔（手感更跟手）。
+      this.pendingCell = { r: cell.r, c: cell.c };
+      if (e.pointerType === 'mouse' || e.pointerType === 'pen') {
+        this._commitPending();
+      }
       this.dragging = { r: cell.r, c: cell.c };
       this.requestRender();
     }
 
+    /** 真正把按下时暂存的那一格画上去 */
+    _commitPending() {
+      const p = this.pendingCell;
+      if (!p) return;
+      this.pendingCell = null;
+      this._applyAt(p.r, p.c);
+      this.requestRender();
+    }
+
     _move(e) {
+      this._trackPointer(e);
+      // 双指手势优先
+      if (this._pinch) { this._applyGesture(); return; }
+      if (this._touches && this._touches.size >= 2) { this._beginGesture(); this._applyGesture(); return; }
       if (this.panning) {
         const dx = e.clientX - this.panning.x, dy = e.clientY - this.panning.y;
         this.panning = { x: e.clientX, y: e.clientY };
@@ -118,6 +214,11 @@
       }
       const cell = this.cellAt(e);
       this._setHover(cell);
+      // 预览模式不画；手势结束后残留的手指移动也不能漏进来
+      if (this.preview) return;
+      if (this._gestureUsed) return;
+      // 单指确认了：把按下时暂存的那一格补上
+      this._commitPending();
       if (this.dragging && cell) {
         const d = this.dragging;
         if ((cell.r !== d.r || cell.c !== d.c) && this.tool !== 'fill') {
@@ -129,17 +230,39 @@
     }
 
     _up(e) {
+      this._untrackPointer(e);
+      // 所有手指都抬起来了，才结束这一轮触摸
+      const allUp = !this._touches || this._touches.size === 0;
+      // 从双指退回单指：不接着做平移（否则会突然跳一下），只重置手势
+      if (this._pinch) {
+        if (!allUp) { this._beginGesture(); return; }
+        // 手势结束：把绘制态一并清掉，否则剩下那根手指的移动会被当成画画
+        this._pinch = null;
+        this.panning = null;
+        this.dragging = null;
+        this.pendingCell = null;
+        this._changes = null;
+        this._gestureUsed = false;
+        this._gestureIds = null;
+        this._cursor();
+        this.requestRender();
+        return;
+      }
       if (this.panning) {
         this.panning = null;
         this._cursor();
         return;
       }
+      // 单击（按下就抬起、中间没移动）：把暂存的那一格补上，否则点一下没反应
+      this._commitPending();
       if (this._changes && this._changes.length) {
         this._push({ cells: this._changes });
         this._emit('paint');
       }
       this._changes = null;
       this.dragging = null;
+      this.pendingCell = null;
+      if (allUp) { this._gestureUsed = false; this._gestureIds = null; }
       this.requestRender();
       if (e && e.pointerId != null) { try { this.canvas.releasePointerCapture(e.pointerId); } catch (_) { /* ignore */ } }
     }

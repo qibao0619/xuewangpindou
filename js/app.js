@@ -74,13 +74,17 @@
     editor.brush = +$('brushSize').value || 1;
 
     wire();
+    bindMirrors();
     setTool('brush');
     setMode('preview', { silent: true });   // 默认预览模式
     setSidebar(false);
+    setGenOpen(true);
     if (!restoreAutosave()) refreshCounts();
     updateUndoRedo();
     syncSliderLabels();
     syncColorUI();
+    syncMirrorsFromSide();
+    renderChips();
     $('saveState').textContent = '自动保存：等待编辑…';
     lastZoom = editor.view.zoom;
     $('zoomLabel').textContent = Math.round(editor.view.zoom * 100) + '%';
@@ -204,18 +208,139 @@
   /* ================= 图片 ================= */
 
   function drawPreview(img) {
-    const cv = $('imgPreview');
-    const ctx = cv.getContext('2d');
-    const W = cv.width, H = cv.height;
-    ctx.clearRect(0, 0, W, H);
-    ctx.fillStyle = '#0b0e14';
-    ctx.fillRect(0, 0, W, H);
-    const s = Math.min(W / img.naturalWidth, H / img.naturalHeight);
-    const w = img.naturalWidth * s, h = img.naturalHeight * s;
-    ctx.imageSmoothingQuality = 'high';
-    ctx.drawImage(img, (W - w) / 2, (H - h) / 2, w, h);
-    cv.style.display = 'block';
+    for (const id of ['imgPreview', 'imgPreviewM']) {
+      const cv = $(id);
+      if (!cv) continue;
+      const ctx = cv.getContext('2d');
+      const W = cv.width, H = cv.height;
+      ctx.clearRect(0, 0, W, H);
+      ctx.fillStyle = '#0b0e14';
+      ctx.fillRect(0, 0, W, H);
+      const s = Math.min(W / img.naturalWidth, H / img.naturalHeight);
+      const w = img.naturalWidth * s, h = img.naturalHeight * s;
+      ctx.imageSmoothingQuality = 'high';
+      ctx.drawImage(img, (W - w) / 2, (H - h) / 2, w, h);
+      cv.style.display = 'block';
+    }
   }
+
+  /* ---- 手机生成区 ↔ 侧边栏控件 双向同步（generate() 只读侧边栏那一份） ---- */
+
+  const MG_PAIRS = [
+    ['gridWM', 'gridW'], ['gridHM', 'gridH'],
+    ['maxColorsM', 'maxColors'], ['dropBgM', 'dropBg'],
+  ];
+
+  function syncMirrorsFromSide() {
+    for (const [m, s] of MG_PAIRS) {
+      const a = $(m), b = $(s);
+      if (!a || !b) continue;
+      if (a.type === 'checkbox') a.checked = b.checked;
+      else a.value = b.value;
+    }
+    const nm = $('imgNameM');
+    if (nm) nm.textContent = $('imgName').textContent;
+  }
+
+  function bindMirrors() {
+    for (const [m, s] of MG_PAIRS) {
+      const a = $(m), b = $(s);
+      if (!a || !b) continue;
+      a.addEventListener(a.type === 'checkbox' ? 'change' : 'input', () => {
+        if (a.type === 'checkbox') b.checked = a.checked;
+        else b.value = a.value;
+        b.dispatchEvent(new window.Event(a.type === 'checkbox' ? 'change' : 'input', { bubbles: true }));
+      });
+    }
+  }
+
+  /* ---- 生成区折叠 ---- */
+
+  function setGenOpen(open) {
+    const el = $('mobileGen');
+    if (!el) return;
+    el.classList.toggle('collapsed', !open);
+    $('mgToggle').setAttribute('aria-expanded', String(!!open));
+  }
+
+  function genIsOpen() {
+    const el = $('mobileGen');
+    return !!el && !el.classList.contains('collapsed');
+  }
+
+  /* ---- 预览区色块清单 ---- */
+
+  /** 把用量清单渲染成可点的色块（手机/平板在预览图旁边显示） */
+  function renderChips() {
+    const host = $('chipList');
+    if (!host) return;
+    const list = state.counts.list.filter((r) => r.count > 0);
+    $('chipCount').textContent = String(list.length);
+    $('chipTotal').textContent = '共 ' + state.counts.total + ' 颗';
+    host.textContent = '';
+    for (const row of list) {
+      const c = row.color;
+      const b = document.createElement('button');
+      b.className = 'pchip' + (editor.highlight === row.index ? ' active' : '');
+      b.dataset.idx = String(row.index);
+      b.type = 'button';
+      b.title = c.code + ' ' + (c.name || '') + ' × ' + row.count + '（点击高亮）';
+      const sw = document.createElement('i');
+      sw.className = 'pchip-sw';
+      sw.style.background = c.hex;
+      const code = document.createElement('b');
+      code.textContent = shortCode(c.code);
+      const num = document.createElement('span');
+      num.textContent = String(row.count);
+      b.append(sw, code, num);
+      host.appendChild(b);
+    }
+    if (!list.length) {
+      const p = document.createElement('p');
+      p.className = 'hint';
+      p.textContent = '还没有图纸';
+      host.appendChild(p);
+    }
+  }
+
+  /** 色号太长时只留数字（M09 → 09），色块本来就小 */
+  function shortCode(code) {
+    return String(code).replace(/^[A-Za-z]+/, '') || String(code);
+  }
+
+  function onChipClick(e) {
+    const b = e.target.closest && e.target.closest('.pchip');
+    if (!b || !host_has(b)) return;
+    const idx = +b.dataset.idx;
+    if (!(idx >= 0)) return;
+    // 和高亮逻辑跟清单行保持一致：再点同一个 = 取消
+    const same = editor.highlight === idx;
+    editor.setColor(idx);
+    setTool('brush');
+    $('optHighlight').checked = !same;
+    applyViewOptions();     // 开关状态要真正下发到编辑器
+    syncColorUI();
+    markCountRow();
+    renderChips();
+    saveSettings();
+  }
+
+  /**
+   * 手机/平板上生成完：收起生成区，把预览区滚到眼前。
+   * 桌面端（>900px）不滚动，避免把已经看好的侧边栏顶走。
+   */
+  function focusPreview() {
+    if (!isNarrow()) return;
+    setGenOpen(false);
+    const el = $('previewArea');
+    if (!el) return;
+    // 等收起动画结束再滚，否则滚到的位置会偏
+    setTimeout(() => {
+      try { el.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+      catch (_) { el.scrollIntoView(); }
+    }, 60);
+  }
+  function host_has(el) { return !!(el && el.closest && el.closest('#chipList')); }
 
   function loadImageFile(file) {
     if (!file) return;
@@ -246,6 +371,7 @@
     const w = clampInt(+$('gridW').value || 48, 4, 400);
     const h = clampInt(Math.round(w * state.img.naturalHeight / state.img.naturalWidth), 4, 400);
     $('gridH').value = h;
+    syncMirrorsFromSide();
   }
 
   function generate() {
@@ -278,6 +404,7 @@
       const counts = E.countUsage(g.cells, state.palette);
       toast('生成完成：' + g.w + '×' + g.h + ' 格 · ' + counts.total + ' 颗豆 · ' + counts.colors + ' 种颜色' +
         (bgRemoved ? ' · 去掉背景 ' + bgRemoved + ' 格' : '') + ' · ' + ms + 'ms', 'ok');
+      focusPreview();   // 手机/平板：收起生成区并滚到预览
     } catch (err) {
       toast('生成失败：' + err.message, 'err');
     }
@@ -295,7 +422,10 @@
     editor.replaceGrid({ w, h, cells }, { label: 'demo' });
     $('gridW').value = w;
     $('gridH').value = h;
+    syncMirrorsFromSide();
+    syncBeadSizeHint();
     toast('已载入示例图案（16×16 爱心）', 'ok');
+    focusPreview();
   }
 
   /* ================= 用豆清单 / 库存 ================= */
@@ -325,6 +455,7 @@
     }).join('') || '<tr><td colspan="5" class="hint" style="padding:8px">' + (onlyShort ? '没有缺货的颜色' : '画布还是空的，先画点东西吧') + '</td></tr>';
     updateTotals();
     updateUndoRedo();
+    renderChips();
     scheduleAutosave();
   }
 
@@ -334,6 +465,11 @@
     for (let i = 0; i < rows.length; i++) {
       const on = +rows[i].getAttribute('data-idx') === editor.highlight;
       if (on) rows[i].classList.add('active'); else rows[i].classList.remove('active');
+    }
+    const chips = $('chipList') && $('chipList').querySelectorAll ? $('chipList').querySelectorAll('.pchip') : [];
+    for (let i = 0; i < chips.length; i++) {
+      const on = +chips[i].dataset.idx === editor.highlight;
+      if (on) chips[i].classList.add('active'); else chips[i].classList.remove('active');
     }
   }
 
@@ -771,8 +907,51 @@
         const n = +b.getAttribute('data-preset');
         $('gridW').value = n;
         if ($('keepRatio').checked && state.img) syncHeightFromImage(); else $('gridH').value = n;
+        syncMirrorsFromSide();
+        syncBeadSizeHint();
         saveSettings();
       });
+    });
+    // 手机版的一键板数（跟侧边栏那组共用同一套逻辑）
+    document.querySelectorAll('[data-preset-m]').forEach((b) => {
+      b.addEventListener('click', () => {
+        const n = +b.getAttribute('data-preset-m');
+        const side = document.querySelector('[data-preset="' + n + '"]');
+        if (side) side.click();
+      });
+    });
+
+    // 手机生成区：折叠、生成、选图
+    on('mgToggle', 'click', () => {
+      const open = genIsOpen();
+      setGenOpen(!open);
+      // 展开时把生成区滚回来，省得用户找
+      if (!open) { const el = $('mobileGen'); if (el && el.scrollIntoView) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+    });
+    on('btnGenerateM', 'click', generate);
+    on('mgGenTop', 'click', () => {
+      // 顶部那颗「生成」：没选图就展开让用户选，选了就直接生成
+      if (!state.img) setGenOpen(true);
+      else generate();
+    });
+    on('dropZoneM', 'click', (e) => {
+      const t = e.target;
+      if (t.tagName === 'INPUT' || (t.closest && t.closest('label'))) return;
+      $('imageFile').click();
+    });
+
+    // 预览区色块清单
+    on('chipList', 'click', onChipClick);
+
+    // 双指缩放提示：第一次缩放后就不再显示
+    if (editor.onZoom === undefined) editor.onZoom = null;
+    editor.onZoom = () => {
+      const h = $('pinchHint');
+      if (h) h.classList.add('gone');
+    };
+    on('canvasWrap', 'pointerdown', () => {
+      const h = $('pinchHint');
+      if (h) setTimeout(() => h.classList.add('gone'), 1200);
     });
 
     // 图片
@@ -800,10 +979,10 @@
     ['brightness', 'contrast', 'saturation', 'alphaThreshold'].forEach((id) => {
       on(id, 'input', () => { syncSliderLabels(); saveSettings(); });
     });
-    on('gridW', 'input', () => { if ($('keepRatio').checked) syncHeightFromImage(); syncBeadSizeHint(); saveSettings(); });
-    on('gridH', 'input', () => { syncBeadSizeHint(); saveSettings(); });
+    on('gridW', 'input', () => { if ($('keepRatio').checked) syncHeightFromImage(); syncMirrorsFromSide(); syncBeadSizeHint(); saveSettings(); });
+    on('gridH', 'input', () => { syncMirrorsFromSide(); syncBeadSizeHint(); saveSettings(); });
     on('keepRatio', 'change', () => { if ($('keepRatio').checked) syncHeightFromImage(); syncBeadSizeHint(); saveSettings(); });
-    ['maxColors', 'dither', 'keepAlpha', 'dropBg'].forEach((id) => on(id, 'change', saveSettings));
+    ['maxColors', 'dither', 'keepAlpha', 'dropBg'].forEach((id) => on(id, 'change', () => { syncMirrorsFromSide(); saveSettings(); }));
     on('beadMM', 'change', () => { syncBeadSizeHint(); saveSettings(); });
     on('brushSize', 'change', () => { editor.brush = +$('brushSize').value || 1; saveSettings(); });
     ['optCodes', 'optGridLines', 'optBoardGuides', 'optHighlight'].forEach((id) => {
@@ -950,6 +1129,10 @@
     refreshCounts();
     return editor.grid;
   };
+
+  /** 测试用：拿到编辑器实例（验证双指缩放这类手势行为用）。
+   *  用 getter 是因为 editor 是在 init() 里才创建的。 */
+  Object.defineProperty(window, '__editorForTest', { get: () => editor, configurable: true });
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
   else init();

@@ -257,6 +257,103 @@ body.mode-preview .tools .btn.active { background: var(--bg-3); border-color: va
 }
 .statusbar .hint { margin-left: auto; }
 
+/* ---------- 预览区 = 画布 + 旁边/下面的色块清单 ---------- */
+.preview-area { flex: 1 1 auto; display: flex; min-height: 0; min-width: 0; }
+.chip-panel { display: none; }   /* 桌面端用侧边栏的用豆清单，这里不重复显示 */
+.pinch-hint { display: none; }
+
+/* 手机生成区：桌面端不显示 */
+.mobile-gen { display: none; }
+
+/* 窄屏 / 平板：竖屏时「生成区在上、预览在下」，横屏时「预览在左、色块在右」 */
+@media (max-width: 900px) {
+  /* 生成区收成头部条 + 可折叠主体 */
+  .mobile-gen {
+    display: block; flex: 0 0 auto;
+    background: var(--bg-2); border-bottom: 1px solid var(--line);
+  }
+  .mg-head {
+    display: flex; align-items: center; gap: 8px; padding: 8px 10px;
+  }
+  .mg-title {
+    flex: 1 1 auto; display: flex; align-items: center; gap: 8px;
+    background: none; border: none; color: var(--text); cursor: pointer;
+    font-size: 13px; font-weight: 600; text-align: left; padding: 4px 2px;
+  }
+  .mg-caret {
+    width: 0; height: 0; flex: 0 0 auto;
+    border-left: 5px solid transparent; border-right: 5px solid transparent;
+    border-top: 6px solid var(--muted);
+    transition: transform .2s ease;
+  }
+  #mobileGen.collapsed .mg-caret { transform: rotate(-90deg); }
+  .mg-body { padding: 2px 10px 10px; }
+  #mobileGen.collapsed .mg-body { display: none; }
+  .mg-drop { padding: 14px 10px; }
+  .mg-drop .dz-preview { height: 74px; }
+  .mg-body .check { margin: 7px 0; }
+
+  /* 预览区：竖屏上下排 */
+  .preview-area { flex-direction: column; }
+  .chip-panel {
+    display: flex; flex-direction: column;
+    flex: 0 0 auto; max-height: 34vh;
+    border-top: 1px solid var(--line); background: #131a26;
+  }
+  .chip-head {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 6px 10px; font-size: 12px; color: #b9c6da;
+    border-bottom: 1px solid var(--line);
+  }
+  .chip-head b { color: var(--accent-2); }
+  .chip-list {
+    display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 10px;
+    overflow-y: auto; align-content: flex-start;
+  }
+  .pchip {
+    display: inline-flex; align-items: center; gap: 5px;
+    border: 1px solid var(--line); background: var(--bg-3); color: var(--text);
+    border-radius: 999px; padding: 4px 9px 4px 4px; font-size: 12px; cursor: pointer;
+  }
+  .pchip .pchip-sw {
+    width: 18px; height: 18px; border-radius: 5px; display: block;
+    border: 1px solid rgba(255,255,255,.28); flex: 0 0 auto;
+  }
+  .pchip b { font-weight: 700; letter-spacing: .2px; }
+  .pchip span { color: var(--muted); font-variant-numeric: tabular-nums; }
+  .pchip.active {
+    border-color: var(--accent); background: #2b4a75; color: #dbeaff;
+    box-shadow: 0 0 0 1px rgba(78,161,255,.5) inset;
+  }
+  .pchip.active span { color: #cfe6ff; }
+  .chip-tip { margin: 0; padding: 0 10px 8px; font-size: 11px; }
+
+  /* 画布上的「双指可缩放」提示 */
+  .pinch-hint {
+    display: block; position: absolute; left: 50%; bottom: 12px; transform: translateX(-50%);
+    background: rgba(8,11,17,.82); border: 1px solid var(--line); color: #b9c6da;
+    font-size: 11px; padding: 4px 10px; border-radius: 999px;
+    pointer-events: none; transition: opacity .35s ease;
+  }
+  .pinch-hint.gone { opacity: 0; }
+
+  /* 手机上编辑类按钮本来就会隐藏（预览模式），工具栏允许横滑 */
+  .stage-toolbar { flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .stage-toolbar::-webkit-scrollbar { height: 0; }
+}
+
+/* 横屏 / 平板横向：预览在左，色块清单在右 */
+@media (min-width: 620px) and (max-width: 1100px) and (orientation: landscape),
+       (min-width: 700px) and (max-width: 900px) {
+  .preview-area { flex-direction: row; }
+  .chip-panel {
+    flex: 0 0 190px; max-width: 190px; max-height: none;
+    border-top: none; border-left: 1px solid var(--line);
+  }
+  .chip-list { padding: 8px; }
+  .chip-tip { padding: 0 8px 8px; }
+}
+
 /* ---------- toast ---------- */
 .toast-host { position: fixed; right: 16px; bottom: 16px; display: flex; flex-direction: column; gap: 8px; z-index: 50; }
 .toast {

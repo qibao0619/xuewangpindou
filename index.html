@@ -203,6 +203,44 @@
   </aside>
 
   <section class="stage">
+    <!-- 手机 / 平板：顶部生成区，生成完自动收起 -->
+    <div class="mobile-gen" id="mobileGen">
+      <div class="mg-head">
+        <button id="mgToggle" class="mg-title" aria-expanded="true">
+          <span class="mg-caret" aria-hidden="true"></span>
+          <span id="mgTitle">选择图片生成图纸</span>
+        </button>
+        <button id="mgGenTop" class="btn tiny primary">生成</button>
+      </div>
+      <div class="mg-body" id="mgBody">
+        <div id="dropZoneM" class="dropzone mg-drop">
+          <div class="dz-icon">IMG</div>
+          <div class="dz-text">点这里选图片，或把图片拖进来</div>
+          <div id="imgNameM" class="dz-name">尚未选择图片</div>
+          <canvas id="imgPreviewM" class="dz-preview" width="160" height="90"></canvas>
+        </div>
+        <div class="row">
+          <label class="lbl">宽度</label>
+          <input id="gridWM" class="input num" type="number" min="4" max="400" step="1" value="48">
+          <label class="lbl">高度</label>
+          <input id="gridHM" class="input num" type="number" min="4" max="400" step="1" value="48">
+        </div>
+        <div class="row wrap">
+          <button class="btn tiny" data-preset-m="29">一块板 29</button>
+          <button class="btn tiny" data-preset-m="58">四块板 58</button>
+          <button class="btn tiny" data-preset-m="87">九块板 87</button>
+        </div>
+        <label class="check"><input id="dropBgM" type="checkbox"> 去掉四周背景（只留主体）</label>
+        <div class="row">
+          <label class="lbl">最多颜色</label>
+          <input id="maxColorsM" class="input num" type="number" min="0" max="999" step="1" value="0">
+          <span class="hint">0 = 不限</span>
+        </div>
+        <button id="btnGenerateM" class="btn primary block">生成图纸</button>
+        <p class="hint" style="margin:6px 0 0">要改图？点下面的「编辑」。更多选项在「菜单」里。</p>
+      </div>
+    </div>
+
     <div class="stage-toolbar">
       <button id="btnSidebar" class="btn tiny sidebar-toggle" title="展开/收起侧边栏" aria-label="展开或收起侧边栏" aria-expanded="false">菜单</button>
       <div class="mode-switch" role="group" aria-label="模式切换">
@@ -227,9 +265,23 @@
       <span id="zoomLabel" class="zoom-label">—</span>
       <button id="btnExportPng2" class="btn tiny primary push-right">导出 PNG</button>
     </div>
-    <div class="canvas-wrap" id="canvasWrap">
-      <canvas id="grid"></canvas>
+
+    <!-- 画布 + 旁边的色块清单（横屏/平板时在右侧，竖屏时在下方） -->
+    <div class="preview-area" id="previewArea">
+      <div class="canvas-wrap" id="canvasWrap">
+        <canvas id="grid"></canvas>
+        <div class="pinch-hint" id="pinchHint">双指可缩放</div>
+      </div>
+      <aside class="chip-panel" id="chipPanel">
+        <div class="chip-head">
+          <span>用色 <b id="chipCount">0</b> 种</span>
+          <span class="hint" id="chipTotal">共 0 颗</span>
+        </div>
+        <div class="chip-list" id="chipList"></div>
+        <p class="hint chip-tip">点一个色块 = 高亮它在图上的位置，再点取消</p>
+      </aside>
     </div>
+
     <div class="statusbar">
       <span id="statusMode" class="mode-badge">预览模式</span>
       <span id="statusCell">格：—</span>

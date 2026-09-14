@@ -7,7 +7,7 @@
  *   - 静态资源走「缓存优先 + 后台更新」，加载快；
  *   - 只缓存同源 GET，不碰其他请求。
  */
-const VERSION = 'xuewang-pindou-v1';
+const VERSION = 'xuwangpindou-v1';
 const SHELL = [
   './',
   './index.html',

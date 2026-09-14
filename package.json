@@ -1,0 +1,24 @@
+{
+  "name": "xuwangpindou",
+  "version": "1.0.0",
+  "private": true,
+  "description": "雪王拼豆 · 图片转拼豆图纸 + 像素网格编辑器 + 用豆清单（纯前端，零依赖，可装到手机桌面离线使用）",
+  "scripts": {
+    "serve": "node tools/serve.mjs",
+    "check": "node tools/check.mjs",
+    "test": "node tools/smoke.mjs",
+    "test:dom": "node tools/domtest.mjs",
+    "test:paint": "node tools/test-paint.mjs",
+    "test:layout": "node tools/test-layout.mjs",
+    "probe": "node tools/probe-palette.mjs",
+    "icons": "node tools/build-icons.mjs",
+    "single": "node tools/build-single.mjs",
+    "test:single": "node tools/build-single.mjs && node tools/test-single.mjs",
+    "test:offline": "node tools/test-offline.mjs",
+    "data:fetch": "node tools/fetch-webfem.mjs && node tools/fetch-pixelbeads.mjs && node tools/fetch-mard-data.mjs",
+    "data:build": "node tools/build-palette-data.mjs",
+    "verify": "node tools/check.mjs && node tools/test-layout.mjs && node tools/smoke.mjs && node tools/domtest.mjs && node tools/test-paint.mjs && node tools/test-single.mjs && node tools/test-offline.mjs"
+  },
+  "keywords": ["拼豆", "雪王拼豆", "perler", "hama", "beads", "pixel-art", "pwa"],
+  "license": "MIT"
+}
