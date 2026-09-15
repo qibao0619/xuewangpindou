@@ -23,6 +23,12 @@ html, body {
   overflow: hidden;
 }
 
+/* 手机浏览器：100% 会按「地址栏收起时」的大视口算，顶栏会被地址栏压住。
+   用 dvh（动态视口）跟着地址栏实时变化，再留 safe-area 给刘海/小白条。 */
+@supports (height: 100dvh) {
+  html, body { height: 100dvh; }
+}
+
 body { display: flex; flex-direction: column; }
 
 /* ---------- top bar ---------- */
@@ -223,12 +229,35 @@ body.mode-preview .tools .btn.active { background: var(--bg-3); border-color: va
     flex-basis: 86vw; max-width: 86vw; width: 86vw;
     transform: translateX(-100%);
     box-shadow: 0 0 40px rgba(0,0,0,.5);
-    padding-top: 14px;
+    padding-top: calc(14px + env(safe-area-inset-top, 0px));
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    overscroll-behavior: contain;
   }
   body.sidebar-open .panel { transform: none; }
-  .topbar { padding: 8px 10px; gap: 10px; }
+  /* 手机上不提供编辑功能：连「预览/编辑」切换和编辑工具一起藏掉。
+     注意画笔/橡皮/吸管/填充这组只有 data-tool、没有 .edit-only 类，
+     所以必须单独点名，否则它们会漏网、在手机上留下四个点了没用的按钮。 */
+  #modeEdit, #modePreview, .mode-switch,
+  .edit-only, .edit-tools, [data-edit-only],
+  .tools { display: none !important; }
+
+  /* 底部状态栏手机上整个去掉：
+     里面是「格 / 色 / 尺寸」，靠鼠标悬停才有内容，手机没有悬停、等于一行废话；
+     而且它一直占着屏幕底部，白白吃掉一块看图的地方。 */
+  .statusbar { display: none !important; }
+
+  /* 顶栏：手机上品牌名 + 「转图纸」+ 「导出 ▾」，一行放下。
+     导出选项点开是浮层，不占顶栏位置。 */
+  .topbar { padding: 8px 10px; gap: 8px; flex-wrap: nowrap; }
+  .topbar-actions { gap: 6px; flex: 0 0 auto; }
+  .brand { min-width: 0; flex: 1 1 auto; gap: 8px; }
+  .brand > div { min-width: 0; }
+  .brand h1 {
+    font-size: 16px; line-height: 1.2;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
   .brand p { display: none; }
-  .topbar-actions { gap: 6px; }
+  .brand .logo { width: 30px; height: 30px; border-radius: 9px; }
   .stage-toolbar { gap: 5px; padding: 6px 8px; overflow-x: auto; }
   .stage-toolbar .sep { display: none; }
   .zoom-label { min-width: 44px; }
@@ -241,14 +270,6 @@ body.mode-preview .tools .btn.active { background: var(--bg-3); border-color: va
 
 @media (max-width: 560px) {
   .brand h1 { font-size: 15px; }
-  .topbar-actions .btn { padding: 6px 9px; font-size: 12px; }
-  #btnNew, #btnOpenProject { display: none; }   /* 手机上次要操作收进侧边栏 */
-  .push-right { margin-left: 0; }
-  .stage-toolbar { flex-wrap: nowrap; }
-  .mode-switch .btn { padding: 5px 10px; }
-  .statusbar #statusSize { display: none; }
-  .toast-host { left: 10px; right: 10px; bottom: 10px; }
-  .toast { max-width: none; }
 }
 
 .statusbar {
@@ -257,101 +278,330 @@ body.mode-preview .tools .btn.active { background: var(--bg-3); border-color: va
 }
 .statusbar .hint { margin-left: auto; }
 
-/* ---------- 预览区 = 画布 + 旁边/下面的色块清单 ---------- */
-.preview-area { flex: 1 1 auto; display: flex; min-height: 0; min-width: 0; }
-.chip-panel { display: none; }   /* 桌面端用侧边栏的用豆清单，这里不重复显示 */
-.pinch-hint { display: none; }
+/* ---------- 预览区 = 画布（色块清单收进悬浮球里） ---------- */
+.preview-area { flex: 1 1 auto; display: flex; min-height: 0; min-width: 0; position: relative; }
+
+/* 悬浮球：点开才出现色块清单，平时只占一个小圆 */
+.chip-ball {
+  position: absolute; right: 14px; bottom: 14px; z-index: 6;
+  width: 52px; height: 52px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(20,26,38,.92); border: 1px solid #3a465c;
+  color: #e6edf7; cursor: pointer; padding: 0;
+  box-shadow: 0 4px 16px rgba(0,0,0,.45);
+  backdrop-filter: blur(6px);
+  transition: transform .15s ease, background .15s ease;
+}
+.chip-ball:hover { background: rgba(32,42,60,.96); }
+.chip-ball:active { transform: scale(.94); }
+.chip-ball-icon { display: block; width: 26px; height: 26px; pointer-events: none; }
+/* 用色数量做成球上的小角标 */
+.chip-ball-count {
+  position: absolute; top: -3px; right: -3px;
+  min-width: 20px; height: 20px; padding: 0 5px;
+  border-radius: 999px; background: var(--accent);
+  color: #fff; font-size: 11px; font-weight: 700;
+  display: flex; align-items: center; justify-content: center;
+  border: 2px solid #0d1219;
+}
+.chip-ball[aria-expanded="true"] { background: var(--accent); border-color: var(--accent); }
+
+/* 展开的色块面板：从球上方浮出来 */
+.chip-panel {
+  position: absolute; right: 14px; bottom: 76px; z-index: 7;
+  width: min(340px, calc(100% - 28px));
+  max-height: min(52vh, 420px);
+  display: flex; flex-direction: column;
+  background: #151d2b; border: 1px solid #33405a; border-radius: 14px;
+  box-shadow: 0 10px 34px rgba(0,0,0,.55);
+  overflow: hidden;
+}
+.chip-panel[hidden] { display: none; }
+.chip-head {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 12px; font-size: 13px; color: #b9c6da;
+  border-bottom: 1px solid var(--line); flex: 0 0 auto;
+}
+.chip-head b { color: var(--accent-2); }
+.chip-close {
+  margin-left: auto; flex: 0 0 auto;
+  background: none; border: 1px solid #3a465c; border-radius: 8px;
+  color: #b9c6da; font-size: 12px; padding: 5px 10px; cursor: pointer;
+  min-height: 38px;                 /* 手机上手指点得准 */
+  min-width: 56px;
+}
+.chip-close:hover { background: #1d2635; }
+.chip-list {
+  display: flex; flex-direction: column;      /* 竖向单列：一行一个颜色 */
+  gap: 2px; padding: 6px; overflow-y: auto;
+  -webkit-overflow-scrolling: touch; overscroll-behavior: contain;
+}
+/* 单列每行：色块 + 色号 + 颗数 */
+.chip-list .pchip {
+  display: flex; align-items: center; gap: 10px; width: 100%;
+  padding: 8px 10px; min-height: 44px;        /* 手指点得准 */
+  border-radius: 9px; border: 1px solid transparent;
+  background: none; color: var(--text); cursor: pointer;
+  text-align: left; font-size: 13px;
+}
+.chip-list .pchip:hover { background: #1d2635; }
+.chip-list .pchip.active {
+  border-color: var(--accent); background: #2b4a75;
+}
+.chip-list .pchip-sw {
+  width: 22px; height: 22px; flex: 0 0 auto;
+  border-radius: 5px; border: 1px solid rgba(255,255,255,.18);
+}
+.chip-list .pchip b {
+  flex: 1 1 auto; font-family: ui-monospace, Consolas, monospace;
+  letter-spacing: .3px;
+}
+.chip-list .pchip span { flex: 0 0 auto; color: var(--muted); font-size: 12px; }
+.chip-list .pchip.active span { color: #cfe6ff; }
 
 /* 手机生成区：桌面端不显示 */
-.mobile-gen { display: none; }
+/* 手机专用的「导出 ▾」按钮：桌面端不显示 */
+/* 只在手机上出现的侧边栏分区：桌面端隐藏 */
 
 /* 窄屏 / 平板：竖屏时「生成区在上、预览在下」，横屏时「预览在左、色块在右」 */
 @media (max-width: 900px) {
-  /* 生成区收成头部条 + 可折叠主体 */
-  .mobile-gen {
-    display: block; flex: 0 0 auto;
-    background: var(--bg-2); border-bottom: 1px solid var(--line);
+  /* ---- 关键：手机上改成「整页可滚动」，不再把东西硬塞进一屏 ----
+     桌面端是一屏不滚的固定布局，但手机一屏装不下生成区 + 画布 + 色块清单，
+     硬塞的结果就是画布被压成一条缝。这里放开滚动，每块给够高度。 */
+  html, body { height: auto; min-height: 100%; overflow: visible; }
+  @supports (height: 100dvh) {
+    html, body { height: auto; min-height: 100dvh; }
   }
-  .mg-head {
-    display: flex; align-items: center; gap: 8px; padding: 8px 10px;
-  }
-  .mg-title {
-    flex: 1 1 auto; display: flex; align-items: center; gap: 8px;
-    background: none; border: none; color: var(--text); cursor: pointer;
-    font-size: 13px; font-weight: 600; text-align: left; padding: 4px 2px;
-  }
-  .mg-caret {
-    width: 0; height: 0; flex: 0 0 auto;
-    border-left: 5px solid transparent; border-right: 5px solid transparent;
-    border-top: 6px solid var(--muted);
-    transition: transform .2s ease;
-  }
-  #mobileGen.collapsed .mg-caret { transform: rotate(-90deg); }
-  .mg-body { padding: 2px 10px 10px; }
-  #mobileGen.collapsed .mg-body { display: none; }
-  .mg-drop { padding: 14px 10px; }
-  .mg-drop .dz-preview { height: 74px; }
-  .mg-body .check { margin: 7px 0; }
+  body { display: block; }          /* 不再用纵向 flex 撑满一屏 */
+  main { display: block; }
+  .stage { display: block; }
 
-  /* 预览区：竖屏上下排 */
-  .preview-area { flex-direction: column; }
-  .chip-panel {
-    display: flex; flex-direction: column;
-    flex: 0 0 auto; max-height: 34vh;
-    border-top: 1px solid var(--line); background: #131a26;
+  /* 顶栏吸顶，滚下去也能随时切模式 / 开菜单 */
+  .topbar {
+    position: sticky; top: 0; z-index: 20;
+    padding: 8px 10px; gap: 10px;
   }
-  .chip-head {
-    display: flex; align-items: center; justify-content: space-between;
-    padding: 6px 10px; font-size: 12px; color: #b9c6da;
-    border-bottom: 1px solid var(--line);
-  }
-  .chip-head b { color: var(--accent-2); }
-  .chip-list {
-    display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 10px;
-    overflow-y: auto; align-content: flex-start;
-  }
-  .pchip {
-    display: inline-flex; align-items: center; gap: 5px;
-    border: 1px solid var(--line); background: var(--bg-3); color: var(--text);
-    border-radius: 999px; padding: 4px 9px 4px 4px; font-size: 12px; cursor: pointer;
-  }
-  .pchip .pchip-sw {
-    width: 18px; height: 18px; border-radius: 5px; display: block;
-    border: 1px solid rgba(255,255,255,.28); flex: 0 0 auto;
-  }
-  .pchip b { font-weight: 700; letter-spacing: .2px; }
-  .pchip span { color: var(--muted); font-variant-numeric: tabular-nums; }
-  .pchip.active {
-    border-color: var(--accent); background: #2b4a75; color: #dbeaff;
-    box-shadow: 0 0 0 1px rgba(78,161,255,.5) inset;
-  }
-  .pchip.active span { color: #cfe6ff; }
-  .chip-tip { margin: 0; padding: 0 10px 8px; font-size: 11px; }
 
-  /* 画布上的「双指可缩放」提示 */
-  .pinch-hint {
-    display: block; position: absolute; left: 50%; bottom: 12px; transform: translateX(-50%);
-    background: rgba(8,11,17,.82); border: 1px solid var(--line); color: #b9c6da;
-    font-size: 11px; padding: 4px 10px; border-radius: 999px;
-    pointer-events: none; transition: opacity .35s ease;
-  }
-  .pinch-hint.gone { opacity: 0; }
+  /* 手机上不再有独立的生成区（参数统一在弹窗里问），
+     这一段原有的 .mobile-gen / .mg-* 规则已随元素一起删除。 */
 
-  /* 手机上编辑类按钮本来就会隐藏（预览模式），工具栏允许横滑 */
-  .stage-toolbar { flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  /* 预览区：竖屏上下排（不再用 flex 拉伸，改为固定可视高度） */
+  .preview-area { display: block; }
+  .canvas-wrap {
+    height: 58vh;              /* 画布自己占一大块，能看清 */
+    min-height: 320px;
+  }
+  @supports (height: 100dvh) {
+    .canvas-wrap { height: 58dvh; }
+  }
+
+  /* 工具栏跟在画布上方，不吸顶：
+     手机屏幕本来就矮，再钉一条工具栏会把画布挤得没地方。 */
+  .stage-toolbar {
+    gap: 5px; padding: 7px 8px;
+    overflow-x: auto; flex-wrap: nowrap;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
   .stage-toolbar::-webkit-scrollbar { height: 0; }
+  /* 手机按钮放大到手指点得准（原来桌面尺寸太小） */
+  .stage-toolbar .btn {
+    min-height: 38px; padding: 8px 13px; font-size: 13px; flex: 0 0 auto;
+  }
+  .stage-toolbar .sep { display: none; }
+  .zoom-label { min-width: 46px; font-size: 12px; flex: 0 0 auto; }
+  .mode-switch .btn { min-height: 38px; padding: 8px 16px; }
+
+  /* 色块面板现在是悬浮在画布上的浮层（基础样式里定义），
+     手机上不再需要「跟在画布后面」那一套覆盖规则。 */
+
+  .statusbar { flex-wrap: wrap; gap: 8px 12px; font-size: 12px; padding: 8px 12px; }
+  .statusbar .hint { margin-left: 0; flex-basis: 100%; }
 }
 
-/* 横屏 / 平板横向：预览在左，色块清单在右 */
-@media (min-width: 620px) and (max-width: 1100px) and (orientation: landscape),
-       (min-width: 700px) and (max-width: 900px) {
-  .preview-area { flex-direction: row; }
-  .chip-panel {
-    flex: 0 0 190px; max-width: 190px; max-height: none;
-    border-top: none; border-left: 1px solid var(--line);
+/* 横屏 / 平板横向：画布铺满，色块面板仍然是悬浮的（不再占一列） */
+@media (max-width: 900px) and (orientation: landscape) and (min-height: 420px) {
+  .canvas-wrap { height: 62vh; min-height: 240px; }
+  @supports (height: 100dvh) {
+    .canvas-wrap { height: 62dvh; }
   }
-  .chip-list { padding: 8px; }
-  .chip-tip { padding: 0 8px 8px; }
+  /* 横屏时球贴在右边，面板往上开，别挡住图 */
+  .chip-panel { width: min(360px, 46vw); max-height: min(60vh, 380px); }
+}
+
+/* 小屏手机（≤560px）：再收紧一点，但按钮必须保持手指能点的大小 */
+@media (max-width: 560px) {
+  .brand h1 { font-size: 15px; }
+  .canvas-wrap { height: 52vh; min-height: 260px; }
+  @supports (height: 100dvh) {
+    .canvas-wrap { height: 52dvh; }
+  }
+  .statusbar #statusSize { display: none; }
+  .toast-host { left: 10px; right: 10px; bottom: 10px; }
+  .toast { max-width: none; }
+  .topbar-actions .btn { padding: 8px 11px; font-size: 13px; min-height: 38px; }
+  .stage-toolbar .btn { padding: 8px 11px; font-size: 13px; }
+  .mode-switch .btn { padding: 8px 14px; }
+}
+
+/* ---------- 全屏预览 ---------- */
+/* 两种模式：
+   1) fs-native —— 真的调用了 Fullscreen API，画布铺满整个屏幕；
+   2) fs-fallback —— 浏览器不让全屏（iOS Safari 的 Element.requestFullscreen 缺失），
+      退化成「固定定位铺满视口」，观感几乎一样，只是地址栏还在。
+   两者都用同一套样式，靠 body 上的类切换。 */
+
+.exit-fs {
+  position: absolute; top: 10px; right: 10px; z-index: 5;
+  padding: 9px 15px; min-height: 42px;
+  background: rgba(12,16,24,.82); color: #e6edf7;
+  border: 1px solid #3a465c; border-radius: 999px;
+  font-size: 13px; font-weight: 600; cursor: pointer;
+  backdrop-filter: blur(6px);
+}
+.exit-fs:active { background: rgba(30,40,58,.92); }
+
+/* 全屏时的一次性提示，几秒后自己淡出 */
+.fs-tip {
+  position: absolute; left: 50%; bottom: 18px; transform: translateX(-50%);
+  z-index: 4; pointer-events: none;
+  background: rgba(8,11,17,.82); border: 1px solid var(--line);
+  color: #b9c6da; font-size: 12px; padding: 7px 14px; border-radius: 999px;
+  transition: opacity .5s ease; white-space: nowrap;
+}
+.fs-tip.gone { opacity: 0; }
+
+/* 全屏状态下把画布铺满，其余 UI 全部隐藏。
+   注意：.chip-ball / .chip-panel 不在这里 —— 全屏下也要能用球点开清单、
+   在图上高亮某个颜色。早先把 .chip-panel 一起藏了，全屏点球就是一片空白。 */
+body.fs-on .topbar,
+body.fs-on .stage-toolbar,
+body.fs-on .statusbar,
+body.fs-on .panel,
+body.fs-on .scrim { display: none !important; }
+
+body.fs-on { overflow: hidden; }
+body.fs-on main { display: block; padding: 0; margin: 0; }
+body.fs-on .stage { display: block; height: 100%; }
+body.fs-on .preview-area { display: block; height: 100%; }
+body.fs-on .canvas-wrap {
+  position: fixed; inset: 0; z-index: 60;
+  width: 100vw; height: 100vh; height: 100dvh;
+  min-height: 0; border-radius: 0;
+}
+/* 全屏时画布本身是 fixed，但球和面板是相对 .preview-area 定位的，
+   那个容器还在文档流里（高度可能只有 58vh）—— 参照系对不上，面板会跑出屏幕。
+   所以全屏时把这两个也改成 fixed，直接贴屏幕右下角。 */
+body.fs-on .chip-ball {
+  position: fixed; right: 16px; bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+  z-index: 70;
+}
+body.fs-on .chip-panel {
+  position: fixed; right: 16px; z-index: 71;
+  bottom: calc(84px + env(safe-area-inset-bottom, 0px));
+  max-height: min(60vh, 460px);
+  max-height: min(60dvh, 460px);
+}
+
+/* 真·全屏 API 下 :fullscreen 元素自己铺满，双重保险 */
+.canvas-wrap:fullscreen { width: 100vw; height: 100vh; height: 100dvh; }
+.canvas-wrap:-webkit-full-screen { width: 100vw; height: 100vh; height: 100dvh; }
+
+/* ---------- 顶栏的「导出 ▾」浮层菜单 ---------- */
+.menu-wrap { position: relative; display: inline-flex; }
+.menu-pop {
+  position: absolute; right: 0; top: calc(100% + 6px); z-index: 70;
+  min-width: 190px;
+  background: var(--panel); border: 1px solid #3a465c; border-radius: 12px;
+  box-shadow: 0 12px 34px rgba(0,0,0,.55);
+  padding: 6px; display: flex; flex-direction: column; gap: 2px;
+}
+.menu-pop[hidden] { display: none; }
+.menu-item {
+  display: block; width: 100%; text-align: left;
+  background: none; border: none; border-radius: 8px;
+  color: var(--text); font-size: 13px; cursor: pointer;
+  padding: 10px 12px; min-height: 40px;
+}
+.menu-item:hover { background: #1d2635; }
+.menu-item.danger { color: #ff8f8f; }
+.menu-item.danger:hover { background: #3a1f22; }
+.menu-sep { height: 1px; background: var(--line); margin: 4px 6px; }
+
+/* ---------- 选完图片后的参数弹窗 ---------- */
+.modal {
+  position: fixed; inset: 0; z-index: 80;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(4,7,12,.66);
+  padding: 16px;
+  padding-top: calc(16px + env(safe-area-inset-top, 0px));
+  padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+}
+.modal[hidden] { display: none; }
+
+.modal-box {
+  width: min(440px, 100%);
+  max-height: 100%;
+  display: flex; flex-direction: column;
+  background: var(--panel); border: 1px solid #33405a; border-radius: 16px;
+  box-shadow: 0 18px 50px rgba(0,0,0,.6);
+  overflow: hidden;
+}
+.modal-head {
+  display: flex; align-items: center; gap: 10px;
+  padding: 14px 16px; border-bottom: 1px solid var(--line); flex: 0 0 auto;
+}
+.modal-head h2 { margin: 0; font-size: 16px; }
+.modal-x {
+  margin-left: auto; background: none; border: 1px solid #3a465c; border-radius: 9px;
+  cursor: pointer; color: #b9c6da; font-size: 12px;
+  min-height: 38px; min-width: 56px; padding: 0 10px;
+}
+.modal-x:hover { background: #1d2635; color: var(--text); }
+
+.modal-body {
+  padding: 14px 16px; overflow-y: auto;
+  -webkit-overflow-scrolling: touch; overscroll-behavior: contain;
+}
+.modal-body .row { margin-bottom: 10px; }
+.modal-body .lbl { min-width: 108px; }
+.modal-body .input { min-height: 38px; }
+.modal-body .check { min-height: 38px; }
+
+/* 弹窗里的小缩略图：让用户确认选对了图 */
+.modal-thumb { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
+.modal-thumb[hidden] { display: none; }
+.modal-thumb canvas {
+  width: 108px; height: 62px; flex: 0 0 auto;
+  border: 1px solid var(--line); border-radius: 9px; background: #0d1219;
+  object-fit: contain;
+}
+.modal-thumb-name {
+  font-size: 12px; color: var(--muted);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+.modal-foot {
+  display: flex; gap: 10px; justify-content: flex-end;
+  padding: 12px 16px; border-top: 1px solid var(--line); flex: 0 0 auto;
+}
+.modal-foot .btn { min-height: 42px; padding: 0 18px; }
+
+/* 手机上：弹窗从底部升起，两个按钮并排占满宽度，好按 */
+@media (max-width: 560px) {
+  .modal { align-items: flex-end; padding: 0; }
+  .modal-box {
+    width: 100%; max-height: 88vh; max-height: 88dvh;
+    border-radius: 18px 18px 0 0; border-bottom: none;
+  }
+  .modal-body .lbl { min-width: 96px; }
+  /* 弹窗里的输入框 / 下拉给足高度和字号：
+     小于 16px 时 iOS 会自动放大整个页面，用户点一下宽高就「跳一下」。 */
+  .modal-body .input, .modal-body select {
+    min-height: 44px; font-size: 16px;
+  }
+  .modal-foot { padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px)); }
+  .modal-foot .btn { flex: 1 1 0; }
 }
 
 /* ---------- toast ---------- */

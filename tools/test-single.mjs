@@ -65,7 +65,8 @@ ok('MARD 色卡有 221 色', pals[0].colors.length === 221, pals[0].colors.lengt
 // 界面初始化
 ok('默认是预览模式', doc.getElementById('statusMode').textContent === '预览模式', doc.getElementById('statusMode').textContent);
 ok('色板渲染出来了', doc.getElementById('swatches').children.length > 0, doc.getElementById('swatches').children.length);
-ok('模式按钮都在', !!doc.getElementById('modeEdit') && !!doc.getElementById('modePreview'));
+ok('模式按钮已移除（改用 P 键切换）', !doc.getElementById('modeEdit') && !doc.getElementById('modePreview'));
+ok('转图纸在工具栏里', !!doc.getElementById('btnMake') && !!doc.getElementById('btnMake').closest('.stage-toolbar'));
 ok('侧边栏按钮存在', !!doc.getElementById('btnSidebar'));
 
 // 点一下示例图案，确认交互链路通

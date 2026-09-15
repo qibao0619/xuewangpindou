@@ -224,59 +224,54 @@
     }
   }
 
-  /* ---- 手机生成区 ↔ 侧边栏控件 双向同步（generate() 只读侧边栏那一份） ---- */
+  /* ---- 生成区折叠 ----
+     手机上的独立生成区已经删掉了（参数统一在弹窗里问），
+     下面这几个函数保留成空操作，免得散落各处的调用点都要改。 */
 
-  const MG_PAIRS = [
-    ['gridWM', 'gridW'], ['gridHM', 'gridH'],
-    ['maxColorsM', 'maxColors'], ['dropBgM', 'dropBg'],
-  ];
-
-  function syncMirrorsFromSide() {
-    for (const [m, s] of MG_PAIRS) {
-      const a = $(m), b = $(s);
-      if (!a || !b) continue;
-      if (a.type === 'checkbox') a.checked = b.checked;
-      else a.value = b.value;
-    }
-    const nm = $('imgNameM');
-    if (nm) nm.textContent = $('imgName').textContent;
-  }
-
-  function bindMirrors() {
-    for (const [m, s] of MG_PAIRS) {
-      const a = $(m), b = $(s);
-      if (!a || !b) continue;
-      a.addEventListener(a.type === 'checkbox' ? 'change' : 'input', () => {
-        if (a.type === 'checkbox') b.checked = a.checked;
-        else b.value = a.value;
-        b.dispatchEvent(new window.Event(a.type === 'checkbox' ? 'change' : 'input', { bubbles: true }));
-      });
-    }
-  }
-
-  /* ---- 生成区折叠 ---- */
-
-  function setGenOpen(open) {
-    const el = $('mobileGen');
-    if (!el) return;
-    el.classList.toggle('collapsed', !open);
-    $('mgToggle').setAttribute('aria-expanded', String(!!open));
-  }
-
-  function genIsOpen() {
-    const el = $('mobileGen');
-    return !!el && !el.classList.contains('collapsed');
-  }
+  function setGenOpen() { /* 已无手机生成区 */ }
+  function genIsOpen() { return false; }
+  /** 侧边栏那套隐藏 input 现在是唯一数据源，没有「镜像」要同步了 */
+  function syncMirrorsFromSide() { /* 无镜像控件 */ }
+  function bindMirrors() { /* 无镜像控件 */ }
 
   /* ---- 预览区色块清单 ---- */
 
-  /** 把用量清单渲染成可点的色块（手机/平板在预览图旁边显示） */
+  /**
+   * 清单每次都要整块重建（DOM 换新），滚动位置会丢。
+   * 所以重建前记下当前位置，重建后恢复 —— 但只在「颜色集合没变」时恢复：
+   * 重新生成图纸后颜色全变了，套用旧位置是错的。
+   * 只活在本次会话里（内存变量），刷新页面就重置。
+   */
+  let chipScrollTop = 0;
+  let chipSignature = '';
+
+  /** 颜色集合的指纹：色号+颗数拼起来，变了说明是另一张图 */
+  function chipsSignature(list) {
+    return list.map((r) => r.color.code + ':' + r.count).join(',');
+  }
+
+  /** 把用量清单渲染出来（收在悬浮球弹出来的面板里） */
   function renderChips() {
     const host = $('chipList');
     if (!host) return;
     const list = state.counts.list.filter((r) => r.count > 0);
     $('chipCount').textContent = String(list.length);
     $('chipTotal').textContent = '共 ' + state.counts.total + ' 颗';
+    // 球上的角标也跟着用色数量走
+    const badge = $('chipBallCount');
+    if (badge) badge.textContent = String(list.length);
+
+    const sig = chipsSignature(list);
+    const sameColors = sig === chipSignature;
+
+    // 顺序很关键：
+    //  1) 颜色变了 → 先把记忆清零，再往下走（否则重建后的 scrollTop=0 会被当成新位置记下来）
+    //  2) 面板开着 → 记下用户当前滚到哪（刚打开时读到的是重建后的 0，不算数）
+    //  3) 清空 DOM 前先记，清空后 scrollTop 天然变 0
+    if (!sameColors) chipScrollTop = 0;
+    else if (chipPanelIsOpen()) chipScrollTop = host.scrollTop;
+    chipSignature = sig;
+
     host.textContent = '';
     for (const row of list) {
       const c = row.color;
@@ -284,14 +279,15 @@
       b.className = 'pchip' + (editor.highlight === row.index ? ' active' : '');
       b.dataset.idx = String(row.index);
       b.type = 'button';
-      b.title = c.code + ' ' + (c.name || '') + ' × ' + row.count + '（点击高亮）';
+      b.title = c.code + ' × ' + row.count + ' 颗（点击高亮）';
       const sw = document.createElement('i');
       sw.className = 'pchip-sw';
       sw.style.background = c.hex;
       const code = document.createElement('b');
-      code.textContent = shortCode(c.code);
+      // 竖排单列有空间，用完整色号（M09），不再截成 09
+      code.textContent = c.code;
       const num = document.createElement('span');
-      num.textContent = String(row.count);
+      num.textContent = row.count + ' 颗';
       b.append(sw, code, num);
       host.appendChild(b);
     }
@@ -301,6 +297,38 @@
       p.textContent = '还没有图纸';
       host.appendChild(p);
     }
+
+    // 恢复：颜色没变就回到用户原来的位置；变了就停在顶部
+    host.scrollTop = sameColors ? chipScrollTop : 0;
+  }
+
+  /* ---- 顶栏「导出 ▾」浮层 ---- */
+  let exportMenuOpen = false;
+  function setExportMenu(open) {
+    const menu = $('exportMenu');
+    const btn = $('btnExport');
+    if (!menu || !btn) return;
+    exportMenuOpen = !!open;
+    menu.hidden = !open;
+    btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+  }
+  function toggleExportMenu() { setExportMenu(!exportMenuOpen); }
+  function closeExportMenu() { if (exportMenuOpen) setExportMenu(false); }
+
+  /* ---- 悬浮色块球 ---- */
+  function setChipPanel(open) {
+    const panel = $('chipPanel');
+    const ball = $('btnChipBall');
+    if (!panel || !ball) return;
+    panel.hidden = !open;
+    ball.setAttribute('aria-expanded', open ? 'true' : 'false');
+  }
+  function chipPanelIsOpen() {
+    const panel = $('chipPanel');
+    return !!panel && !panel.hidden;
+  }
+  function toggleChipPanel() {
+    setChipPanel(!chipPanelIsOpen());
   }
 
   /** 色号太长时只留数字（M09 → 09），色块本来就小 */
@@ -336,9 +364,19 @@
     if (!el) return;
     // 等收起动画结束再滚，否则滚到的位置会偏
     setTimeout(() => {
-      try { el.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
-      catch (_) { el.scrollIntoView(); }
-    }, 60);
+      // 顶栏是吸顶的，直接 scrollIntoView 会把预览区塞到它底下，
+      // 所以自己算位置：目标位置减去顶栏高度再留一点余量。
+      const bar = document.querySelector('.topbar');
+      const offset = (bar ? bar.getBoundingClientRect().height : 0) + 8;
+      const y = el.getBoundingClientRect().top + (window.pageYOffset || 0) - offset;
+      try {
+        window.scrollTo({ top: Math.max(0, y), behavior: 'smooth' });
+      } catch (_) {
+        window.scrollTo(0, Math.max(0, y));
+      }
+      // 布局变了，让编辑器重新量一次画布尺寸
+      if (editor.resize) editor.resize();
+    }, 80);
   }
   function host_has(el) { return !!(el && el.closest && el.closest('#chipList')); }
 
@@ -357,7 +395,8 @@
       drawPreview(img);
       if ($('keepRatio').checked) syncHeightFromImage();
       URL.revokeObjectURL(url);
-      toast('图片已载入，点「生成图纸」开始转换', 'ok');
+      // 图载入后直接弹参数窗，选完格数/颜色数/去背景就能生成
+      setTimeout(openGenModal, 80);
     };
     img.onerror = () => {
       URL.revokeObjectURL(url);
@@ -404,12 +443,19 @@
       const counts = E.countUsage(g.cells, state.palette);
       toast('生成完成：' + g.w + '×' + g.h + ' 格 · ' + counts.total + ' 颗豆 · ' + counts.colors + ' 种颜色' +
         (bgRemoved ? ' · 去掉背景 ' + bgRemoved + ' 格' : '') + ' · ' + ms + 'ms', 'ok');
-      focusPreview();   // 手机/平板：收起生成区并滚到预览
+      // 有图了才显示「重新配置」——它就是再弹一次参数窗，不用重新选图
+      const rc = $('btnReconfig');
+      if (rc) rc.hidden = false;
+      focusPreview();
     } catch (err) {
       toast('生成失败：' + err.message, 'err');
     }
   }
 
+  /**
+   * 示例图案是固定 16×16 的内置图形，没有原图、也没有比例可锁，
+   * 所以它直接出图，不弹参数窗（弹窗是给「选图片转图纸」用的）。
+   */
   function loadDemo() {
     const w = DEMO[0].length, h = DEMO.length;
     const fill = C.nearestRgb([224, 58, 47], state.palette);
@@ -422,13 +468,188 @@
     editor.replaceGrid({ w, h, cells }, { label: 'demo' });
     $('gridW').value = w;
     $('gridH').value = h;
-    syncMirrorsFromSide();
     syncBeadSizeHint();
     toast('已载入示例图案（16×16 爱心）', 'ok');
     focusPreview();
   }
 
+  /* ================= 全屏预览 ================= */
+
+  /**
+   * 全屏有两条路：
+   *   1) 真 Fullscreen API（桌面浏览器、Chrome/Edge 安卓都支持）；
+   *   2) 不支持就直接用 CSS 铺满视口（iOS Safari 上 requestFullscreen 缺失）。
+   * 不管走哪条，body 都会带 fs-on，样式统一；差别只是地址栏还在不在。
+   */
+  let fsActive = false;
+
+  function fsSupported(el) {
+    return !!(el && (el.requestFullscreen || el.webkitRequestFullscreen));
+  }
+
+  function isFsNow() {
+    return !!(document.fullscreenElement || document.webkitFullscreenElement);
+  }
+
+  /** 试着把设备转成横屏。浏览器一般不允许网页强制转屏，
+   *  只有安装成 PWA 且处于 fullscreen 时才可能成功，失败就静默忽略。 */
+  function tryLandscape() {
+    try {
+      if (screen.orientation && screen.orientation.lock) {
+        const p = screen.orientation.lock('landscape');
+        if (p && p.catch) p.catch(() => { /* 转不动就算了，布局本来就兼容竖屏 */ });
+      }
+    } catch (_) { /* 忽略 */ }
+  }
+
+  function unlockOrientation() {
+    try {
+      if (screen.orientation && screen.orientation.unlock) screen.orientation.unlock();
+    } catch (_) { /* 忽略 */ }
+  }
+
+  /** 全屏时提示怎么操作，几秒后淡出 */
+  let fsTipTimer = 0;
+  function syncFsTip() {
+    const tip = $('fsTip');
+    if (!tip) return;
+    if (!fsActive) { tip.hidden = true; return; }
+    tip.hidden = false;
+    tip.classList.remove('gone');
+    clearTimeout(fsTipTimer);
+    fsTipTimer = setTimeout(() => tip.classList.add('gone'), 3200);
+  }
+
+  function enterFullscreen() {
+    if (fsActive) return;
+    fsActive = true;
+    const wrap = $('canvasWrap');
+    document.body.classList.add('fs-on');
+    const btn = $('btnExitFullscreen');
+    if (btn) btn.hidden = false;
+    // 真全屏：失败（被拒绝/不支持）也无所谓，CSS 那套已经生效了。
+    // 转屏要等真全屏成功之后再试 —— orientation.lock() 在非全屏状态下必定失败。
+    let lockAfter = false;
+    if (fsSupported(wrap) && !isFsNow()) {
+      lockAfter = true;
+      try {
+        const p = wrap.requestFullscreen
+          ? wrap.requestFullscreen({ navigationUI: 'hide' })
+          : wrap.webkitRequestFullscreen();
+        if (p && p.then) p.then(() => { tryLandscape(); }).catch(() => { /* 拒绝就退回 CSS 全屏 */ });
+        else setTimeout(tryLandscape, 120);
+      } catch (_) { setTimeout(tryLandscape, 120); }
+    }
+    // 没走原生全屏（iOS 等）：直接试一次，转不动就算了
+    if (!lockAfter) tryLandscape();
+    if (editor.resize) editor.resize();
+    setTimeout(() => { if (editor.fit) { editor.fit(); editor.requestRender(); } }, 60);
+    syncFsTip();
+    toast('已进入全屏预览，双击或按 Esc 退出', 'ok');
+  }
+
+  function exitFullscreen() {
+    if (!fsActive) return;
+    fsActive = false;
+    document.body.classList.remove('fs-on');
+    const btn = $('btnExitFullscreen');
+    if (btn) btn.hidden = true;
+    const tip = $('fsTip');
+    if (tip) { tip.hidden = true; tip.classList.add('gone'); }
+    unlockOrientation();
+    if (isFsNow()) {
+      try {
+        const p = document.exitFullscreen ? document.exitFullscreen() : document.webkitExitFullscreen();
+        if (p && p.catch) p.catch(() => { /* 忽略 */ });
+      } catch (_) { /* 忽略 */ }
+    }
+    if (editor.resize) editor.resize();
+    setTimeout(() => { if (editor.fit) { editor.fit(); editor.requestRender(); } }, 60);
+    toast('已退出全屏');
+  }
+
+  function toggleFullscreen() {
+    if (fsActive) exitFullscreen(); else enterFullscreen();
+  }
+
+  /* ================= 生成参数弹窗 ================= */
+
+  /**
+   * 弹窗里的控件是「镜像」：改了它就等于改了侧边栏那个原始 input，
+   * 点「开始生成」时读的还是原始 input。这样两边永远不会不一致，
+   * 也不用把参数在两处同步来同步去。
+   */
+  const GEN_MODAL_PAIRS = [
+    ['gridWModal', 'gridW'], ['gridHModal', 'gridH'],
+    ['maxColorsModal', 'maxColors'], ['dropBgModal', 'dropBg'],
+    ['keepRatioModal', 'keepRatio'],
+  ];
+
+  let genModalOpen = false;
+
+  /** 把侧边栏的值刷到弹窗控件上 */
+  function syncModalFromSide() {
+    for (const [m, s] of GEN_MODAL_PAIRS) {
+      const a = $(m); const b = $(s);
+      if (!a || !b) continue;
+      if (a.type === 'checkbox') a.checked = b.checked;
+      else a.value = b.value;
+    }
+  }
+
+  /** 弹窗改了 → 写回侧边栏（手机生成区和侧边栏也会跟着走） */
+  function syncSideFromModal() {
+    for (const [m, s] of GEN_MODAL_PAIRS) {
+      const a = $(m); const b = $(s);
+      if (!a || !b) continue;
+      if (a.type === 'checkbox') b.checked = a.checked;
+      else b.value = a.value;
+    }
+    syncMirrorsFromSide();
+    saveSettings();
+  }
+
+  function openGenModal() {
+    const m = $('genModal');
+    if (!m) return;
+    syncModalFromSide();
+    // 缩略图：让用户确认选的是哪张图
+    const thumb = $('genModalThumb');
+    const cv = $('genModalPreview');
+    if (state.img && thumb && cv) {
+      thumb.hidden = false;
+      const ctx = cv.getContext('2d');
+      if (ctx) {
+        ctx.clearRect(0, 0, cv.width, cv.height);
+        // 按比例缩放居中，不拉伸变形
+        const r = Math.min(cv.width / state.img.naturalWidth, cv.height / state.img.naturalHeight);
+        const w = state.img.naturalWidth * r, h = state.img.naturalHeight * r;
+        try { ctx.drawImage(state.img, (cv.width - w) / 2, (cv.height - h) / 2, w, h); } catch (_) { /* 忽略 */ }
+      }
+      $('genModalName').textContent = state.imgFileName || '已选图片';
+    } else if (thumb) {
+      thumb.hidden = true;
+    }
+    m.hidden = false;
+    genModalOpen = true;
+  }
+
+  function closeGenModal() {
+    const m = $('genModal');
+    if (m) m.hidden = true;
+    genModalOpen = false;
+  }
+
+  /** 弹窗里点了「开始生成」：先把参数写回，再走正常生成流程 */
+  function confirmGenModal() {
+    syncSideFromModal();
+    closeGenModal();
+    generate();
+  }
+
   /* ================= 用豆清单 / 库存 ================= */
+
+
 
   function refreshCounts() {
     const counts = E.countUsage(editor.grid.cells, state.palette);
@@ -809,20 +1030,19 @@
    */
   function setMode(mode, o) {
     const opt = o || {};
+    // 手机上不提供编辑功能（入口已经藏掉，这里再兜一道，防止快捷键/残留状态切进去）
+    if (mode === 'edit' && editDisabled()) mode = 'preview';
     const edit = mode === 'edit';
     state.mode = edit ? 'edit' : 'preview';
     editor.setPreview(!edit);
     document.body.classList.toggle('mode-edit', edit);
     document.body.classList.toggle('mode-preview', !edit);
-    $('modePreview').classList.toggle('active', !edit);
-    $('modeEdit').classList.toggle('active', edit);
-    $('modePreview').setAttribute('aria-pressed', String(!edit));
-    $('modeEdit').setAttribute('aria-pressed', String(edit));
-    $('statusMode').textContent = edit ? '编辑模式' : '预览模式';
-    $('statusMode').classList.toggle('editing', edit);
-    $('statusHint').textContent = edit
-      ? '左键绘制 · 空格/中键拖拽平移 · 滚轮缩放 · Ctrl+Z 撤销'
-      : '预览模式：拖拽移动 · 滚轮缩放 · 点用豆清单的行可高亮该颜色（不会误改图案）';
+    // 「预览 / 编辑」按钮已从工具栏移除（手机上本来就不用，桌面上靠 P 键和状态栏提示即可），
+    // 所以这里不再去操作那两颗按钮。
+    if ($('statusMode')) {
+      $('statusMode').textContent = edit ? '编辑模式' : '预览模式';
+      $('statusMode').classList.toggle('editing', edit);
+    }
     if (edit && !opt.silent) toast('已进入编辑模式，现在可以改图了');
     if (!edit && !opt.silent) toast('已回到预览模式，图案不会被误改');
     updateUndoRedo();
@@ -830,8 +1050,12 @@
 
   function isEditing() { return state.mode === 'edit'; }
 
+  /** 手机上（窄屏）不显示、也不允许编辑功能 */
+  function editDisabled() { return isNarrow(); }
+
   /** 编辑类操作统一入口：预览模式下给出明确提示，而不是默默没反应 */
   function needEdit() {
+    if (editDisabled()) { toast('手机上只能看和导出，改图请用电脑打开', 'err'); return false; }
     if (isEditing()) return true;
     toast('现在处于预览模式（防止误触改图），请先点顶部「编辑」', 'err');
     return false;
@@ -896,7 +1120,15 @@
   }
 
   function wire() {
-    const on = (id, ev, fn) => { const el = $(id); if (el) el.addEventListener(ev, fn); };
+    // 第 4 个参数是 addEventListener 的 options/capture。
+    // 之前这里只有三个形参，调用处传的 `true`（要注册到捕获阶段）被静默丢掉，
+    // 监听器实际落在冒泡阶段 —— 于是「点空白收起面板」变成了「点球自己也把它关掉」。
+    const on = (id, ev, fn, opts) => {
+      const el = $(id);
+      if (!el) return null;
+      el.addEventListener(ev, fn, opts);
+      return el;
+    };
 
     // 工具按钮
     document.querySelectorAll('[data-tool]').forEach((b) => {
@@ -912,55 +1144,19 @@
         saveSettings();
       });
     });
-    // 手机版的一键板数（跟侧边栏那组共用同一套逻辑）
-    document.querySelectorAll('[data-preset-m]').forEach((b) => {
-      b.addEventListener('click', () => {
-        const n = +b.getAttribute('data-preset-m');
-        const side = document.querySelector('[data-preset="' + n + '"]');
-        if (side) side.click();
-      });
-    });
-
-    // 手机生成区：折叠、生成、选图
-    on('mgToggle', 'click', () => {
-      const open = genIsOpen();
-      setGenOpen(!open);
-      // 展开时把生成区滚回来，省得用户找
-      if (!open) { const el = $('mobileGen'); if (el && el.scrollIntoView) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
-    });
-    on('btnGenerateM', 'click', generate);
-    on('mgGenTop', 'click', () => {
-      // 顶部那颗「生成」：没选图就展开让用户选，选了就直接生成
-      if (!state.img) setGenOpen(true);
-      else generate();
-    });
-    on('dropZoneM', 'click', (e) => {
-      const t = e.target;
-      if (t.tagName === 'INPUT' || (t.closest && t.closest('label'))) return;
-      $('imageFile').click();
-    });
+    // 手机版的一键板数已经删掉（改用弹窗里那组 data-preset-modal）
 
     // 预览区色块清单
     on('chipList', 'click', onChipClick);
 
-    // 双指缩放提示：第一次缩放后就不再显示
-    if (editor.onZoom === undefined) editor.onZoom = null;
-    editor.onZoom = () => {
-      const h = $('pinchHint');
-      if (h) h.classList.add('gone');
-    };
-    on('canvasWrap', 'pointerdown', () => {
-      const h = $('pinchHint');
-      if (h) setTimeout(() => h.classList.add('gone'), 1200);
-    });
-
     // 图片
     on('imageFile', 'change', (e) => loadImageFile(e.target.files && e.target.files[0]));
+    on('imageFile2', 'change', (e) => loadImageFile(e.target.files && e.target.files[0]));
     on('dropZone', 'click', (e) => {
       const t = e.target;
       // label 自己会触发 input，别重复弹两次文件框
       if (t.tagName === 'INPUT' || (t.closest && t.closest('label'))) return;
-      $('imageFile').click();
+      $('imageFile2').click();
     });
     ['dragenter', 'dragover'].forEach((ev) => on('dropZone', ev, (e) => { e.preventDefault(); $('dropZone').classList.add('hover'); }));
     ['dragleave', 'drop'].forEach((ev) => on('dropZone', ev, () => $('dropZone').classList.remove('hover')));
@@ -972,8 +1168,64 @@
     window.addEventListener('dragover', (e) => e.preventDefault());
     window.addEventListener('drop', (e) => e.preventDefault());
 
-    on('btnGenerate', 'click', generate);
+    // ---- 主入口：「转图纸」= 选图片 → 弹参数窗 ----
+    // 两个入口（顶栏 / 侧边栏）走同一条路
+    const startMake = () => { $('imageFile').click(); };
+    on('btnMake', 'click', startMake);
+    on('btnMake2', 'click', startMake);
+    // 「重新配置」：不重新选图，直接拿当前参数再弹一次窗
+    on('btnReconfig', 'click', openGenModal);
     on('btnDemo', 'click', loadDemo);
+
+    // ---- 导出浮层 ----
+    on('btnExport', 'click', (e) => { e.stopPropagation(); toggleExportMenu(); });
+    on('miPng', 'click', () => { closeExportMenu(); exportPng(); });
+    on('miPrint', 'click', () => { closeExportMenu(); printPattern(); });
+    on('miCsv', 'click', () => { closeExportMenu(); exportCsv(); });
+    on('miProject', 'click', () => { closeExportMenu(); saveProject(); });
+    on('miOpen', 'click', () => { closeExportMenu(); $('projectFile').click(); });
+    on('miNew', 'click', () => { closeExportMenu(); newProject(); });
+    // 点别处 / 按 Esc 关掉浮层
+    document.addEventListener('click', (e) => {
+      if (!exportMenuOpen) return;
+      const w = $('btnExport') && $('btnExport').parentElement;
+      if (w && !w.contains(e.target)) closeExportMenu();
+    });
+
+    // ---- 悬浮色块球 ----
+    on('btnChipBall', 'click', toggleChipPanel);
+    on('btnChipClose', 'click', () => setChipPanel(false));
+    // 点画布别处就收起面板（不然一直挡着图）。
+    // 必须排除球和面板自身 —— 它们就在 canvasWrap 里面，
+    // 不排除的话「点球」会先冒泡到这里把面板关掉，再靠 click 重新打开，
+    // 看着能用，实际是在赌事件顺序。
+    on('canvasWrap', 'pointerdown', (e) => {
+      if (!chipPanelIsOpen()) return;
+      const t = e.target;
+      if (t && t.closest && (t.closest('#btnChipBall') || t.closest('#chipPanel'))) return;
+      setChipPanel(false);
+    });
+
+    // ---- 生成参数弹窗 ----
+    on('genModalOk', 'click', confirmGenModal);
+    on('genModalCancel', 'click', closeGenModal);
+    on('genModalClose', 'click', closeGenModal);
+    // 点遮罩空白处关闭（点弹窗本体不关）
+    on('genModal', 'click', (e) => { if (e.target === $('genModal')) closeGenModal(); });
+    // 弹窗里的控件改动 → 立刻写回侧边栏
+    for (const [m] of GEN_MODAL_PAIRS) {
+      on(m, 'input', syncSideFromModal);
+      on(m, 'change', syncSideFromModal);
+    }
+    // 弹窗里的板子预设
+    document.querySelectorAll('[data-preset-modal]').forEach((b) => {
+      b.addEventListener('click', () => {
+        const n = +b.dataset.presetModal;
+        $('gridWModal').value = n;
+        $('gridHModal').value = n;
+        syncSideFromModal();
+      });
+    });
 
     // 参数
     ['brightness', 'contrast', 'saturation', 'alphaThreshold'].forEach((id) => {
@@ -1030,8 +1282,7 @@
     });
 
     // 模式 / 侧边栏
-    on('modePreview', 'click', () => setMode('preview'));
-    on('modeEdit', 'click', () => setMode('edit'));
+    // 模式切换按钮已移除，改用 P 键（见下方快捷键）
     on('btnSidebar', 'click', toggleSidebar);
     on('scrim', 'click', () => setSidebar(false));
 
@@ -1074,21 +1325,16 @@
       toast('库存已清空');
     });
 
-    // 项目
-    on('btnNew', 'click', newProject);
-    on('btnSaveProject', 'click', saveProject);
-    on('btnOpenProject', 'click', () => $('projectFile').click());
+    // 项目（导出浮层里的几个入口在下面统一接）
     on('projectFile', 'change', (e) => { openProjectFile(e.target.files && e.target.files[0]); e.target.value = ''; });
-    on('btnExportPng', 'click', exportPng);
-    on('btnExportPng2', 'click', exportPng);
-    on('btnPrint', 'click', printPattern);
+
     // 窄屏点侧边栏里的按钮后自动收起抽屉，不然会挡住画布
     document.querySelector('.panel').addEventListener('click', (e) => {
       const b = e.target.closest && e.target.closest('button');
       if (!b || !isNarrow()) return;
       if (b.id === 'btnSidebar' || b.closest('.details-toggle')) return;
       // 生成/导入这类动作执行完就收起，方便立刻看结果
-      if (['btnGenerate', 'btnDemo', 'btnApplyPalette', 'btnExportCsv'].includes(b.id) || b.tagName === 'SUMMARY') return;
+      if (['btnMake2', 'btnDemo', 'btnApplyPalette', 'btnExportCsv'].includes(b.id) || b.tagName === 'SUMMARY') return;
       setSidebar(false);
     });
 
@@ -1104,7 +1350,7 @@
       if (k === '0') { editor.fit(); editor.requestRender(); return; }
       if (k === '+' || k === '=') { editor.zoomBy(1.25); return; }
       if (k === '-') { editor.zoomBy(1 / 1.25); return; }
-      if (k === 'p') { setMode(isEditing() ? 'preview' : 'edit'); return; }
+      if (k === 'p') { if (!editDisabled()) setMode(isEditing() ? 'preview' : 'edit'); return; }
       // 其余是绘制类：预览模式下不响应
       if (!isEditing()) return;
       if (k === 'b') setTool('brush');
@@ -1113,10 +1359,57 @@
       else if (k === 'g') setTool('fill');
     });
 
+    // 全屏预览
+    on('btnFullscreen', 'click', toggleFullscreen);
+    on('btnExitFullscreen', 'click', exitFullscreen);
+
+    // 双击画布切换全屏。
+    // 只在「非编辑模式」下生效 —— 编辑模式里双击会连画两格，那是用户想画东西，
+    // 不能把图给切成全屏了。
+    const mayFsByGesture = () => !isEditing();
+    on('canvasWrap', 'dblclick', (e) => {
+      if (!mayFsByGesture()) return;
+      e.preventDefault();
+      toggleFullscreen();
+    });
+    // 手机上双击常常被识别成两次单击，用「320ms 内两次 touchend 且基本没移动」补一手
+    let lastTap = 0, lastTapX = 0, lastTapY = 0;
+    on('canvasWrap', 'touchend', (e) => {
+      if (e.touches && e.touches.length) return;      // 还有手指按着，不是双击
+      if (!mayFsByGesture()) { lastTap = 0; return; }
+      const t = (e.changedTouches && e.changedTouches[0]) || null;
+      if (!t) return;
+      const now = Date.now();
+      const moved = Math.abs(t.clientX - lastTapX) + Math.abs(t.clientY - lastTapY);
+      if (now - lastTap < 320 && moved < 30) {
+        lastTap = 0;
+        toggleFullscreen();
+      } else {
+        lastTap = now; lastTapX = t.clientX; lastTapY = t.clientY;
+      }
+    }, { passive: true });
+
+    // 用户按 Esc 或浏览器自己退出全屏时，把界面状态同步回来。
+    // 注意：走 CSS 全屏（没有真调 API）时这两个事件不会触发，所以只在真的退出时收尾。
+    document.addEventListener('fullscreenchange', () => {
+      if (!document.fullscreenElement && fsActive) exitFullscreen();
+    });
+    document.addEventListener('webkitfullscreenchange', () => {
+      if (!document.webkitFullscreenElement && fsActive) exitFullscreen();
+    });
+    // Esc 也能退（CSS 全屏路径下没有 fullscreenchange，得自己听键盘）
+    window.addEventListener('keydown', (e) => {
+      if (e.key !== 'Escape') return;
+      // 弹窗开着就先关弹窗，别一下子把全屏也退了
+      if (genModalOpen) { e.preventDefault(); closeGenModal(); return; }
+      if (fsActive) { e.preventDefault(); exitFullscreen(); }
+    });
+
     // 窗口尺寸变化时同步抽屉状态
     window.addEventListener('resize', () => {
       if (!isNarrow()) { $('scrim').hidden = true; document.body.classList.remove('sidebar-open'); }
       else $('scrim').hidden = !document.body.classList.contains('sidebar-open');
+      syncFsTip();
     });
   }
 
@@ -1133,6 +1426,21 @@
   /** 测试用：拿到编辑器实例（验证双指缩放这类手势行为用）。
    *  用 getter 是因为 editor 是在 init() 里才创建的。 */
   Object.defineProperty(window, '__editorForTest', { get: () => editor, configurable: true });
+
+  /** 测试用：直接喂一组用量数据渲染色块面板。
+   *  用来验证「颜色集合变了 → 滚动位置记忆作废」这条规则 ——
+   *  靠界面很难造出「颜色集合变化」，直接喂数据才测得准。
+   *  回传内部记住的滚动位置：jsdom 里清空子节点会让 scrollTop 自然变 0，
+   *  光看 scrollTop 分不清「规则真的生效」还是「碰巧就是 0」，必须看这个记忆值。 */
+  window.__renderChipsForTest = (list) => {
+    state.counts = {
+      list,
+      total: list.reduce((n, r) => n + r.count, 0),
+      colors: list.length,
+    };
+    renderChips();
+    return { remembered: chipScrollTop, domScroll: $('chipList').scrollTop };
+  };
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
   else init();

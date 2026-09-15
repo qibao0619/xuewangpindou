@@ -28,14 +28,22 @@
       <p>图片 → 拼豆图纸 · 像素网格编辑 · 用豆清单</p>
     </div>
   </div>
+
   <div class="topbar-actions">
-    <button id="btnNew" class="btn" title="清空当前作品">新建</button>
-    <button id="btnOpenProject" class="btn">导入项目</button>
-    <button id="btnSaveProject" class="btn">导出项目</button>
+    <!-- 导出：一个按钮，点开浮出选项 -->
+    <div class="menu-wrap">
+      <button id="btnExport" class="btn" aria-haspopup="true" aria-expanded="false">导出 ▾</button>
+      <div class="menu-pop" id="exportMenu" hidden role="menu">
+        <button class="menu-item" id="miPng" role="menuitem">导出图纸 PNG</button>
+        <button class="menu-item" id="miPrint" role="menuitem">打印 / 存为 PDF</button>
+        <button class="menu-item" id="miCsv" role="menuitem">导出用豆清单 CSV</button>
+        <button class="menu-item" id="miProject" role="menuitem">导出项目（.json）</button>
+        <button class="menu-item" id="miOpen" role="menuitem">导入项目（.json）</button>
+        <div class="menu-sep"></div>
+        <button class="menu-item danger" id="miNew" role="menuitem">清空重来</button>
+      </div>
+    </div>
     <input id="projectFile" type="file" accept=".json,application/json" hidden>
-    <span class="sep"></span>
-    <button id="btnExportPng" class="btn primary">导出图纸 PNG</button>
-    <button id="btnPrint" class="btn">打印 / 存为 PDF</button>
   </div>
 </header>
 
@@ -45,38 +53,28 @@
     <details class="sect" open>
       <summary>1. 图片转图纸</summary>
       <div class="sect-body">
+        <!-- 生成参数的「真身」：界面不再显示这些控件（参数统一在弹窗里问），
+             但保留隐藏的 input 作为唯一数据源，其他代码照旧读它们。 -->
+        <div class="hidden-params" hidden>
+          <input id="gridW" type="number" min="4" max="400" step="1" value="48">
+          <input id="gridH" type="number" min="4" max="400" step="1" value="48">
+          <input id="maxColors" type="number" min="0" max="999" step="1" value="0">
+          <input id="keepRatio" type="checkbox" checked>
+          <input id="dropBg" type="checkbox">
+        </div>
+
         <div id="dropZone" class="dropzone">
-          <div class="dz-icon">IMG</div>
-          <div class="dz-text">把图片拖到这里，或<label class="link">点击选择<input id="imageFile" type="file" accept="image/*" hidden></label></div>
+          <div class="dz-text">把图片拖到这里，或<label class="link">点击选择<input id="imageFile2" type="file" accept="image/*" hidden></label></div>
           <div id="imgName" class="dz-name">尚未选择图片</div>
           <canvas id="imgPreview" class="dz-preview" width="160" height="90"></canvas>
         </div>
-
-        <div class="row">
-          <label class="lbl">宽度（格）</label>
-          <input id="gridW" class="input num" type="number" min="4" max="400" step="1" value="48">
-          <label class="lbl">高度（格）</label>
-          <input id="gridH" class="input num" type="number" min="4" max="400" step="1" value="48">
-        </div>
-        <label class="check"><input id="keepRatio" type="checkbox" checked> 锁定原图比例（改宽度自动算高度）</label>
         <div class="row wrap">
-          <button class="btn tiny" data-preset="29">一块板 29×29</button>
-          <button class="btn tiny" data-preset="58">四块板 58×58</button>
-          <button class="btn tiny" data-preset="87">九块板 87×87</button>
-        </div>
-        <div class="row">
-          <label class="lbl">最多颜色数</label>
-          <input id="maxColors" class="input num" type="number" min="0" max="999" step="1" value="0">
-          <span class="hint">0 = 不限（合并相近色，见 README）</span>
-        </div>
-
-        <div class="row wrap">
-          <button id="btnGenerate" class="btn primary block">生成图纸</button>
+          <button id="btnMake2" class="btn primary block">转图纸</button>
           <button id="btnDemo" class="btn tiny">示例图案</button>
         </div>
 
         <details class="sub">
-          <summary>更多生成选项（豆径 / 抖动 / 透明 / 去背景）</summary>
+          <summary>更多生成选项（豆径 / 抖动 / 透明）</summary>
           <div class="row" style="margin-top:6px">
             <label class="lbl">豆径</label>
             <select id="beadMM" class="input num">
@@ -84,10 +82,8 @@
               <option value="2.6">2.6 mm 迷你豆</option>
               <option value="10">10 mm 大号豆</option>
             </select>
-            <span class="hint">只影响成品尺寸与分板线参考</span>
           </div>
           <label class="check"><input id="keepAlpha" type="checkbox"> 保留透明背景（透明的格子留空）</label>
-          <label class="check"><input id="dropBg" type="checkbox"> 去掉四周背景（只留主体，人物中间的连接部分保留）</label>
           <label class="check"><input id="dither" type="checkbox"> 抖动（渐变更顺滑，图案更碎）</label>
           <div class="slider">
             <span>透明阈值</span><input id="alphaThreshold" type="range" min="0" max="255" value="16"><b id="alphaVal">16</b>
@@ -121,7 +117,6 @@
         <div id="swatches" class="swatches"></div>
         <div class="row">
           <span class="hint" id="swatchCount">—</span>
-          <span class="hint" style="margin-left:auto">点色块即选为画笔色</span>
         </div>
         <div class="hint" id="paletteNote" hidden></div>
         <div class="row wrap">
@@ -164,7 +159,6 @@
             <button id="btnTrim" class="btn tiny" title="把四周没有豆子的空行空列裁掉">裁掉空白边</button>
             <button id="btnDropBg" class="btn tiny" title="从四边识别背景色并清成空格，只留主体；中间连接部分保留">去四周背景</button>
           </div>
-          <p class="hint">这些操作要先切到「编辑」模式。</p>
         </details>
       </div>
     </details>
@@ -178,7 +172,6 @@
           <span>缺货 <b id="shortageCount">0</b></span>
         </div>
         <label class="check"><input id="stockOnly" type="checkbox"> 只显示库存不足的颜色</label>
-        <div class="hint" style="margin:-2px 0 6px">点清单里的任意一行 = 选中该色并在图纸上高亮它的位置（再点一次取消）</div>
         <div class="table-wrap">
           <table class="counts">
             <thead><tr><th>色</th><th>色号</th><th>数量</th><th>库存</th><th>差额</th></tr></thead>
@@ -192,62 +185,23 @@
       </div>
     </details>
 
-    <details class="sect">
+    <details class="sect" id="sectExport">
       <summary>5. 项目存取</summary>
       <div class="sect-body">
         <p class="hint" id="saveState">自动保存：等待编辑…</p>
-        <p class="hint">项目文件（.json）里同时包含图案、色卡和库存，换电脑打开也能继续改。</p>
       </div>
     </details>
 
   </aside>
 
   <section class="stage">
-    <!-- 手机 / 平板：顶部生成区，生成完自动收起 -->
-    <div class="mobile-gen" id="mobileGen">
-      <div class="mg-head">
-        <button id="mgToggle" class="mg-title" aria-expanded="true">
-          <span class="mg-caret" aria-hidden="true"></span>
-          <span id="mgTitle">选择图片生成图纸</span>
-        </button>
-        <button id="mgGenTop" class="btn tiny primary">生成</button>
-      </div>
-      <div class="mg-body" id="mgBody">
-        <div id="dropZoneM" class="dropzone mg-drop">
-          <div class="dz-icon">IMG</div>
-          <div class="dz-text">点这里选图片，或把图片拖进来</div>
-          <div id="imgNameM" class="dz-name">尚未选择图片</div>
-          <canvas id="imgPreviewM" class="dz-preview" width="160" height="90"></canvas>
-        </div>
-        <div class="row">
-          <label class="lbl">宽度</label>
-          <input id="gridWM" class="input num" type="number" min="4" max="400" step="1" value="48">
-          <label class="lbl">高度</label>
-          <input id="gridHM" class="input num" type="number" min="4" max="400" step="1" value="48">
-        </div>
-        <div class="row wrap">
-          <button class="btn tiny" data-preset-m="29">一块板 29</button>
-          <button class="btn tiny" data-preset-m="58">四块板 58</button>
-          <button class="btn tiny" data-preset-m="87">九块板 87</button>
-        </div>
-        <label class="check"><input id="dropBgM" type="checkbox"> 去掉四周背景（只留主体）</label>
-        <div class="row">
-          <label class="lbl">最多颜色</label>
-          <input id="maxColorsM" class="input num" type="number" min="0" max="999" step="1" value="0">
-          <span class="hint">0 = 不限</span>
-        </div>
-        <button id="btnGenerateM" class="btn primary block">生成图纸</button>
-        <p class="hint" style="margin:6px 0 0">要改图？点下面的「编辑」。更多选项在「菜单」里。</p>
-      </div>
-    </div>
-
     <div class="stage-toolbar">
       <button id="btnSidebar" class="btn tiny sidebar-toggle" title="展开/收起侧边栏" aria-label="展开或收起侧边栏" aria-expanded="false">菜单</button>
-      <div class="mode-switch" role="group" aria-label="模式切换">
-        <button id="modePreview" class="btn tiny" title="预览：只看不改，不会误触" aria-pressed="true">预览</button>
-        <button id="modeEdit" class="btn tiny" title="编辑：可以画、擦、填色、旋转" aria-pressed="false">编辑</button>
-      </div>
-      <span class="sep"></span>
+      <!-- 主入口放这儿：画布正上方，一眼就能看到「从哪开始」 -->
+      <button id="btnMake" class="btn tiny primary" title="选一张图片，转成拼豆图纸">转图纸</button>
+      <input id="imageFile" type="file" accept="image/*" hidden>
+      <button id="btnReconfig" class="btn tiny" hidden title="不重新选图，只改生成参数">重新配置</button>
+      <span class="sep edit-only"></span>
       <div class="tools">
         <button class="btn tiny" data-tool="brush" title="画笔 (B)">画笔 B</button>
         <button class="btn tiny" data-tool="eraser" title="橡皮 (E)">橡皮 E</button>
@@ -263,23 +217,32 @@
       <button id="zoomFit" class="btn tiny" title="适配窗口 (0)">适配</button>
       <button id="zoomIn" class="btn tiny" title="放大">+</button>
       <span id="zoomLabel" class="zoom-label">—</span>
-      <button id="btnExportPng2" class="btn tiny primary push-right">导出 PNG</button>
+      <button id="btnFullscreen" class="btn tiny" title="全屏预览（双击画布也行，Esc 退出）">全屏</button>
     </div>
 
-    <!-- 画布 + 旁边的色块清单（横屏/平板时在右侧，竖屏时在下方） -->
+    <!-- 画布。色块清单收进右下角的悬浮球里（点开才出现），不占版面 -->
     <div class="preview-area" id="previewArea">
       <div class="canvas-wrap" id="canvasWrap">
         <canvas id="grid"></canvas>
-        <div class="pinch-hint" id="pinchHint">双指可缩放</div>
+        <button id="btnExitFullscreen" class="exit-fs" type="button" title="退出全屏 (Esc)" hidden>退出全屏</button>
+        <div class="fs-tip" id="fsTip" hidden>捏合缩放 · 拖动平移 · 双击退出</div>
+
+        <!-- 悬浮色块球 + 展开面板 -->
+        <button id="btnChipBall" class="chip-ball" type="button"
+                title="用色清单：点开选颜色高亮" aria-expanded="false" aria-controls="chipPanel">
+          <img id="chipBallIcon" class="chip-ball-icon" src="assets/icon.svg" alt="" width="26" height="26">
+          <span id="chipBallCount" class="chip-ball-count">0</span>
+        </button>
+
+        <aside class="chip-panel" id="chipPanel" hidden>
+          <div class="chip-head">
+            <span>用色 <b id="chipCount">0</b> 种</span>
+            <span class="hint" id="chipTotal">共 0 颗</span>
+            <button id="btnChipClose" class="chip-close" type="button" title="收起">收起</button>
+          </div>
+          <div class="chip-list" id="chipList"></div>
+        </aside>
       </div>
-      <aside class="chip-panel" id="chipPanel">
-        <div class="chip-head">
-          <span>用色 <b id="chipCount">0</b> 种</span>
-          <span class="hint" id="chipTotal">共 0 颗</span>
-        </div>
-        <div class="chip-list" id="chipList"></div>
-        <p class="hint chip-tip">点一个色块 = 高亮它在图上的位置，再点取消</p>
-      </aside>
     </div>
 
     <div class="statusbar">
@@ -287,10 +250,52 @@
       <span id="statusCell">格：—</span>
       <span id="statusColor">色：—</span>
       <span id="statusSize">尺寸：—</span>
-      <span id="statusHint" class="hint">拖拽/滚轮可缩放平移 · 点用豆清单里的行可高亮该颜色</span>
     </div>
   </section>
 </main>
+
+<!-- 选完图片后弹出来的生成参数。里面的控件只是「镜像」，
+     真正存数据的是侧边栏那几个原始 input，所以两边永远一致。 -->
+<div class="modal" id="genModal" hidden>
+  <div class="modal-box" role="dialog" aria-modal="true" aria-labelledby="genModalTitle">
+    <div class="modal-head">
+      <h2 id="genModalTitle">生成图纸</h2>
+      <button id="genModalClose" class="modal-x" type="button" title="取消">关闭</button>
+    </div>
+    <div class="modal-body">
+      <div id="genModalThumb" class="modal-thumb" hidden>
+        <canvas id="genModalPreview" width="320" height="180"></canvas>
+        <div id="genModalName" class="modal-thumb-name">—</div>
+      </div>
+
+      <div class="row">
+        <label class="lbl">图纸宽度（格）</label>
+        <input id="gridWModal" class="input num" type="number" min="4" max="400" step="1" value="48">
+      </div>
+      <div class="row">
+        <label class="lbl">图纸高度（格）</label>
+        <input id="gridHModal" class="input num" type="number" min="4" max="400" step="1" value="48">
+      </div>
+      <div class="row wrap">
+        <button class="btn tiny" data-preset-modal="29">一块板 29×29</button>
+        <button class="btn tiny" data-preset-modal="58">四块板 58×58</button>
+        <button class="btn tiny" data-preset-modal="87">九块板 87×87</button>
+      </div>
+      <label class="check"><input id="keepRatioModal" type="checkbox" checked> 锁定原图比例（改宽度自动算高度）</label>
+
+      <div class="row">
+        <label class="lbl">最多颜色数</label>
+        <input id="maxColorsModal" class="input num" type="number" min="0" max="999" step="1" value="0">
+        <span class="hint">0 = 不限</span>
+      </div>
+      <label class="check"><input id="dropBgModal" type="checkbox"> 去掉四周背景（只留主体）</label>
+    </div>
+    <div class="modal-foot">
+      <button id="genModalCancel" class="btn" type="button">取消</button>
+      <button id="genModalOk" class="btn primary" type="button">开始生成</button>
+    </div>
+  </div>
+</div>
 
 <div id="scrim" class="scrim" hidden></div>
 <div id="toastHost" class="toast-host"></div>

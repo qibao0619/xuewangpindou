@@ -10,6 +10,11 @@
     "test:dom": "node tools/domtest.mjs",
     "test:paint": "node tools/test-paint.mjs",
     "test:layout": "node tools/test-layout.mjs",
+    "test:mobile": "node tools/test-mobile.mjs",
+    "test:ruler": "node tools/test-ruler.mjs",
+    "test:fullscreen": "node tools/test-fullscreen.mjs",
+    "test:ui": "node tools/test-ui2.mjs",
+    "zip": "node tools/make-upload-zip.mjs",
     "probe": "node tools/probe-palette.mjs",
     "icons": "node tools/build-icons.mjs",
     "single": "node tools/build-single.mjs",
@@ -17,7 +22,7 @@
     "test:offline": "node tools/test-offline.mjs",
     "data:fetch": "node tools/fetch-webfem.mjs && node tools/fetch-pixelbeads.mjs && node tools/fetch-mard-data.mjs",
     "data:build": "node tools/build-palette-data.mjs",
-    "verify": "node tools/check.mjs && node tools/test-layout.mjs && node tools/smoke.mjs && node tools/domtest.mjs && node tools/test-paint.mjs && node tools/test-single.mjs && node tools/test-offline.mjs"
+    "verify": "node tools/check.mjs && node tools/test-layout.mjs && node tools/test-mobile.mjs && node tools/test-ruler.mjs && node tools/smoke.mjs && node tools/domtest.mjs && node tools/test-paint.mjs && node tools/test-fullscreen.mjs && node tools/test-ui2.mjs && node tools/build-single.mjs && node tools/test-single.mjs && node tools/test-offline.mjs"
   },
   "keywords": ["拼豆", "雪王拼豆", "perler", "hama", "beads", "pixel-art", "pwa"],
   "license": "MIT"

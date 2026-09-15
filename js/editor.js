@@ -787,26 +787,45 @@
 
       const z0 = this.view.zoom;
       const step = z0 >= 26 ? 1 : z0 >= 13 ? 2 : z0 >= 7 ? 5 : 10;
+      const board = this.opts.boardSize || 29;
       ctx.font = '10px ui-monospace, Consolas, monospace';
-      ctx.fillStyle = '#8b97ad';
-      ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      for (let c = 0; c < g.w; c++) {
-        const isEdge = (c + 1) % (this.opts.boardSize || 29) === 0;
-        if (c % step !== 0 && !isEdge) continue;
-        const x = gx + c * z + z / 2;
-        if (x < M.left + 6 || x > W - 6) continue;
-        ctx.fillStyle = isEdge ? '#ffb75a' : '#8b97ad';
-        ctx.fillText(String(c + 1), x, M.top / 2);
+      // 格子小的时候刻度会挤在一起（29 和 31 只差 2 格），按最小间距过滤：
+      // 板号（橙色）优先，普通刻度遇到重叠就让路。
+      const MIN_GAP = 16;
+      const pickTicks = (n, isEdgeAt, posOf, lo, hi) => {
+        const cands = [];
+        for (let i = 0; i < n; i++) {
+          const isEdge = isEdgeAt(i);
+          if (i % step !== 0 && !isEdge) continue;
+          const p = posOf(i);
+          if (p < lo || p > hi) continue;
+          cands.push({ i, p, isEdge });
+        }
+        // 板号（29/58/87）是打板时最有用的参考线，必须保住；
+        // 普通刻度围着板号太近就直接不要 —— 否则会出现 "29 31"、"58 61" 这种糊在一起的样子。
+        const edges = cands.filter((c) => c.isEdge).sort((a, b) => a.p - b.p);
+        const norms = cands.filter((c) => !c.isEdge).sort((a, b) => a.p - b.p);
+        const out = [];
+        const tooClose = (p) => out.some((o) => Math.abs(o.p - p) < MIN_GAP);
+        // 1) 先放板号（板号之间也留间距）
+        for (const e of edges) if (!tooClose(e.p)) out.push(e);
+        // 2) 再按位置补普通刻度
+        for (const c of norms) if (!tooClose(c.p)) out.push(c);
+        return out.sort((a, b) => a.p - b.p);
+      };
+
+      ctx.textAlign = 'center';
+      for (const t of pickTicks(g.w, (c) => (c + 1) % board === 0,
+        (c) => gx + c * z + z / 2, M.left + 6, W - 6)) {
+        ctx.fillStyle = t.isEdge ? '#ffb75a' : '#8b97ad';
+        ctx.fillText(String(t.i + 1), t.p, M.top / 2);
       }
       ctx.textAlign = 'right';
-      for (let r = 0; r < g.h; r++) {
-        const isEdge = (r + 1) % (this.opts.boardSize || 29) === 0;
-        if (r % step !== 0 && !isEdge) continue;
-        const y = gy + r * z + z / 2;
-        if (y < M.top + 6 || y > H - 6) continue;
-        ctx.fillStyle = isEdge ? '#ffb75a' : '#8b97ad';
-        ctx.fillText(String(r + 1), M.left - 6, y);
+      for (const t of pickTicks(g.h, (r) => (r + 1) % board === 0,
+        (r) => gy + r * z + z / 2, M.top + 6, H - 6)) {
+        ctx.fillStyle = t.isEdge ? '#ffb75a' : '#8b97ad';
+        ctx.fillText(String(t.i + 1), M.left - 6, t.p);
       }
 
       if (this.hover) {

@@ -22,10 +22,13 @@ const jsClasses = new Set(
 const used = new Set([...htmlClasses, ...jsClasses]);
 
 // 只检查我们这次新加/改动的这批，避免把通用类名卷入误报
-const watch = ['chip', 'chip-panel', 'chip-head', 'chip-list', 'chip-tip',
+// （mobile-gen / mg-* 已经随「手机生成区」一起删除，不再列入）
+const watch = ['chip', 'chip-panel', 'chip-head', 'chip-list',
+               'chip-ball', 'chip-ball-icon', 'chip-ball-count', 'chip-close',
                'pchip', 'pchip-sw',
-               'mobile-gen', 'mg-head', 'mg-title', 'mg-body', 'mg-caret', 'mg-drop',
-               'preview-area', 'pinch-hint'];
+               'modal', 'modal-box', 'modal-head', 'modal-body', 'modal-foot', 'modal-x', 'modal-thumb',
+               'menu-wrap', 'menu-pop', 'menu-item', 'menu-sep',
+               'preview-area'];
 
 let bad = 0;
 console.log('=== 类名交叉核对 ===');
@@ -38,13 +41,36 @@ for (const c of watch) {
     (inCss ? 'CSS ' : '缺CSS! ') + (inUse ? '在用' : '没人用!'));
 }
 
-// 响应式必须真的切换：竖屏上下排 / 横屏左右排
-console.log('\n=== 横竖屏规则 ===');
-const portrait = /\.preview-area \{ flex-direction: column; \}/.test(css);
-const landscape = /orientation: landscape/.test(css) && /\.preview-area \{ flex-direction: row; \}/.test(css);
-console.log((portrait ? '  ✓ ' : '  ✗ ') + '竖屏：预览区上下排（色块在下方）');
-console.log((landscape ? '  ✓ ' : '  ✗ ') + '横屏：预览区左右排（色块在右侧）');
-if (!portrait || !landscape) bad++;
+// 横竖屏必须真的切换，而且要保证手机上「能滚、不被压扁」
+console.log('\n=== 手机布局关键规则 ===');
+const checks = [
+  ['手机放开滚动（否则一屏塞不下会被压扁）',
+    /html, body \{ height: auto; min-height: 100%; overflow: visible; \}/.test(css)],
+  ['用 dvh 跟地址栏实时变化',
+    /100dvh/.test(css)],
+  ['手机上 body 改回 block（不再硬撑一屏）',
+    /body \{ display: block; \}/.test(css)],
+  ['画布有明确可视高度（不靠 flex 抢空间）',
+    /\.canvas-wrap \{\s*height: 58vh/.test(css)],
+  ['竖屏：预览区改成上下自然排布',
+    /\.preview-area \{ display: block; \}/.test(css)],
+  ['横屏：画布高度够（色块面板改成悬浮，不再占一列）',
+    /orientation: landscape\) and \(min-height: 420px\)[\s\S]{0,300}\.canvas-wrap \{ height: 62/.test(css)],
+  ['手机按钮够手指点（>=38px）',
+    /\.stage-toolbar \.btn \{\s*min-height: 38px/.test(css)],
+  ['顶部吸顶，滚下去还能切模式',
+    /\.topbar \{\s*position: sticky; top: 0/.test(css)],
+  ['刘海屏留安全区',
+    /env\(safe-area-inset-top/.test(css)],
+  ['色块面板是悬浮的（不占版面）',
+    /\.chip-panel \{\s*position: absolute/.test(css)],
+  ['悬浮球固定在预览区右下角',
+    /\.chip-ball \{\s*position: absolute; right: 14px; bottom: 14px/.test(css)],
+];
+for (const [name, pass] of checks) {
+  if (!pass) bad++;
+  console.log((pass ? '  ✓ ' : '  ✗ ') + name);
+}
 
 console.log('\n' + (bad ? '✗ ' + bad + ' 项有问题' : '✓ 类名与横竖屏规则全部正确'));
 process.exitCode = bad ? 1 : 0;

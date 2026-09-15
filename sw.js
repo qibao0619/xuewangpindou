@@ -7,7 +7,7 @@
  *   - 静态资源走「缓存优先 + 后台更新」，加载快；
  *   - 只缓存同源 GET，不碰其他请求。
  */
-const VERSION = 'xuwangpindou-v1';
+const VERSION = 'xuwangpindou-v6';
 const SHELL = [
   './',
   './index.html',
@@ -66,9 +66,23 @@ self.addEventListener('fetch', (e) => {
     return;
   }
 
-  // 静态资源：缓存优先，同时后台更新
+  // 静态资源：缓存优先，同时后台更新。
+  // 但 index.html / styles.css / js 这类「改了必须立刻生效」的文件走网络优先，
+  // 否则改了样式手机上还是旧的（缓存优先会先返回 hit，更新要等下一次访问才生效）。
+  const MUST_BE_FRESH = /\.(?:html|css|js|mjs|webmanifest)$/i.test(url.pathname) || url.pathname.endsWith('/');
   e.respondWith((async () => {
     const c = await caches.open(VERSION);
+    if (MUST_BE_FRESH) {
+      try {
+        const fresh = await fetch(req);
+        if (fresh && fresh.ok) c.put(req, fresh.clone());
+        return fresh;
+      } catch (_) {
+        const hit = await c.match(req);
+        if (hit) return hit;
+        return Response.error();
+      }
+    }
     const hit = await c.match(req);
     const net = fetch(req).then((res) => {
       if (res && res.ok) c.put(req, res.clone());

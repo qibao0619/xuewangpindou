@@ -88,6 +88,10 @@ else {
   const sw = readFileSync(swPath, 'utf8');
   try { new vm.Script(sw, { filename: 'sw.js' }); }
   catch (err) { problems.push(`sw.js 语法错误：${err.message}`); }
+  // 缓存版本号变了才会清掉旧缓存。忘了改版本 = 手机上一直看到旧样式（踩过这个坑）
+  const ver = sw.match(/const VERSION = '([^']+)'/);
+  if (!ver) problems.push('sw.js 里找不到 VERSION');
+  else notes.push(`sw.js 缓存版本 ${ver[1]}（改了静态文件记得把它 +1，否则手机上更新不了）`);
   // 预缓存清单里的文件必须真实存在，否则离线时会缺件
   const shellBlock = sw.match(/const SHELL = \[([\s\S]*?)\];/);
   if (!shellBlock) problems.push('sw.js 里找不到 SHELL 预缓存清单');
@@ -112,7 +116,8 @@ for (const cls of ['toast', 'sw', 'sel', 'hover', 'short', 'ok', 'active', 'pann
 }
 // 布局/响应式类必须有样式，否则会静默失效
 for (const cls of ['mode-switch', 'mode-badge', 'scrim', 'sidebar-toggle', 'preview',
-                   'mobile-gen', 'preview-area', 'chip-panel', 'pchip', 'pinch-hint', 'mg-body']) {
+                   'preview-area', 'chip-panel', 'chip-ball', 'modal',
+                   'menu-pop', 'menu-item', 'pchip']) {
   if (!new RegExp('\\.' + cls + '\\b').test(css)) problems.push(`styles.css 缺少 .${cls} 规则（布局/响应式会失效）`);
 }
 const bp = (css.match(/@media \(max-width: \d+px\)/g) || []).length;

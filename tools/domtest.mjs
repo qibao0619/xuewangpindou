@@ -126,6 +126,12 @@ function ok(name, cond, extra) {
 }
 const tick = (ms) => new Promise((r) => setTimeout(r, ms));
 
+/** 按 P 键切换预览 / 编辑模式（原来工具栏上有按钮，现在只剩快捷键） */
+function pressP(win) {
+  win.dispatchEvent(new win.KeyboardEvent('keydown', { key: 'p', bubbles: true, cancelable: true }));
+}
+
+
 await new Promise((r) => {
   if (doc.readyState === 'complete') r();
   else window.addEventListener('load', r);
@@ -159,7 +165,8 @@ ok('色板选中态跟随', $('swatches').children[5].classList.contains('sel'))
 console.log('\n预览模式（默认只读，不会误触）');
 const cv = $('grid');
 ok('默认是预览模式', $('statusMode').textContent === '预览模式', $('statusMode').textContent);
-ok('默认预览时「编辑」按钮不是激活态', !$('modeEdit').classList.contains('active'));
+// 「预览 / 编辑」按钮已从工具栏移除，改由 P 键切换，所以这里查状态而不是查按钮
+ok('「预览/编辑」按钮已移除', !$('modeEdit') && !$('modePreview'));
 ok('body 上有 mode-preview 类', doc.body.classList.contains('mode-preview'));
 {
   // 在预览模式下手绘：应该一点都画不上去
@@ -185,11 +192,10 @@ ok('body 上有 mode-preview 类', doc.body.classList.contains('mode-preview'));
 }
 
 console.log('\n切到编辑模式');
-click($('modeEdit'));
+pressP(window);
 await tick(30);
 ok('切到编辑后状态栏显示编辑模式', $('statusMode').textContent === '编辑模式', $('statusMode').textContent);
 ok('切到编辑后 body 类切换', doc.body.classList.contains('mode-edit') && !doc.body.classList.contains('mode-preview'));
-ok('切到编辑后「编辑」按钮激活', $('modeEdit').classList.contains('active'));
 ok('切到编辑后编辑类按钮显示出来', window.getComputedStyle($('btnUndo')).display !== 'none');
 
 console.log('\n网格编辑（模拟鼠标绘制）');
@@ -281,7 +287,9 @@ try {
   ok('imageToGrid 全链路可运行', false, e.message);
 }
 try {
-  click($('btnPrint'));
+  click($('btnExport'));      // 导出项现在收在浮层里
+  await tick(40);
+  click($('miPrint'));
   await tick(600);
   ok('打印流程调用了 window.print', (window.__printed || 0) >= 1, String(window.__printed));
   ok('打印页包含图纸与图例', /<img/.test($('printSheet').innerHTML) && /class="legend"/.test($('printSheet').innerHTML));
@@ -290,7 +298,9 @@ try {
   ok('打印流程无异常', false, e.message);
 }
 try {
-  click($('btnExportPng'));
+  click($('btnExport'));
+  await tick(40);
+  click($('miPng'));
   await tick(60);
   const png = (window.__downloads || []).find((d) => /雪王拼豆-图纸-.*\.png$/.test(d.filename));
   ok('导出 PNG 触发下载且文件名正确', !!png, JSON.stringify(window.__downloads));
@@ -482,32 +492,27 @@ ok('viewport 带 viewport-fit=cover（刘海屏）', /viewport-fit=cover/.test((
 
 console.log('\n手机 / 平板布局');
 
-// 生成区：默认展开，点标题能折叠
-ok('有手机生成区', !!$('mobileGen'));
-ok('生成区默认展开', !$('mobileGen').classList.contains('collapsed'));
-click($('mgToggle'));
-await tick(30);
-ok('点标题后生成区收起', $('mobileGen').classList.contains('collapsed'));
-ok('收起后 aria-expanded=false', $('mgToggle').getAttribute('aria-expanded') === 'false');
-click($('mgToggle'));
-await tick(30);
-ok('再点一次能展开', !$('mobileGen').classList.contains('collapsed'));
+// 手机生成区已删除：参数统一在弹窗里问，手机和桌面共用同一套入口
+ok('不再有手机专用生成区', !$('mobileGen'));
+ok('参数仍以隐藏 input 形式存在于侧边栏',
+  !!$('gridW') && !!$('gridH') && !!$('maxColors') && !!$('dropBg') && !!$('keepRatio'));
 
-// 镜像控件：改手机上的宽度，侧边栏那份要跟着变
-$('gridWM').value = '29';
-$('gridWM').dispatchEvent(new window.Event('input', { bubbles: true }));
-await tick(30);
-ok('手机改宽度会同步到侧边栏', $('gridW').value === '29', 'gridW=' + $('gridW').value);
-$('gridW').value = '58';
-$('gridW').dispatchEvent(new window.Event('input', { bubbles: true }));
-await tick(30);
-ok('侧边栏改宽度会同步回手机', $('gridWM').value === '58', 'gridWM=' + $('gridWM').value);
-$('maxColorsM').value = '12';
-$('maxColorsM').dispatchEvent(new window.Event('input', { bubbles: true }));
-await tick(30);
-ok('手机改最多颜色数会同步', $('maxColors').value === '12', 'maxColors=' + $('maxColors').value);
+// 生成入口：顶栏和侧边栏各一个，点了都是打开文件选择
+ok('顶栏有「转图纸」', !!$('btnMake'));
+ok('侧边栏有「转图纸」', !!$('btnMake2'));
 
-// 生成后焦点行为：窄屏才收起+滚动，桌面端不动
+// 弹窗是唯一的参数入口，并且和隐藏 input 双向同步
+ok('有参数弹窗', !!$('genModal'));
+ok('弹窗里有宽高', !!$('gridWModal') && !!$('gridHModal'));
+ok('弹窗里有最多颜色数', !!$('maxColorsModal'));
+ok('弹窗里有去背景', !!$('dropBgModal'));
+ok('弹窗里有锁定原图比例', !!$('keepRatioModal'));
+$('gridWModal').value = '29';
+$('gridWModal').dispatchEvent(new window.Event('input', { bubbles: true }));
+await tick(30);
+ok('弹窗改宽度会同步到内部参数', $('gridW').value === '29', 'gridW=' + $('gridW').value);
+
+// 生成后焦点行为：窄屏才滚动，桌面端不动
 ok('预览区存在', !!$('previewArea'));
 
 console.log('\n预览区色块清单');
@@ -798,7 +803,7 @@ console.log('\n双指缩放（触屏手势）');
 
     // 预览模式下双指缩放不能改图
     // 注意：前面的用例把界面切到了编辑模式，这里必须显式切回预览，否则测的是另一回事
-    click($('modePreview'));
+    pressP(window);
     await tick(30);
     ok('已切回预览模式再测', ed.preview === true, 'preview=' + ed.preview);
     // 先放点真实内容进去，否则全是空格子，"没被改" 就没有说服力
@@ -830,7 +835,7 @@ console.log('\n双指缩放（触屏手势）');
       ed.grid.cells.filter((v) => v >= 0).length + ' 个非空格');
 
     // 编辑模式下双指缩放同样只缩放，不该顺手画上一笔
-    click($('modeEdit'));
+    pressP(window);
     await tick(30);
     ok('已切到编辑模式', ed.preview === false);
     const beforeE = ed.grid.cells.slice();
@@ -844,8 +849,63 @@ console.log('\n双指缩放（触屏手势）');
     let sameE = beforeE.length === ed.grid.cells.length;
     for (let i = 0; sameE && i < beforeE.length; i++) if (beforeE[i] !== ed.grid.cells[i]) sameE = false;
     ok('编辑模式下双指缩放也不会顺手画上一笔', sameE, '被改了');
-    click($('modePreview'));
+    pressP(window);
     await tick(20);
+  }
+}
+
+console.log('\n导出入口（顶栏浮层，手机桌面共用）');
+{
+  ok('有「导出 ▾」按钮', !!$('btnExport'));
+  ok('有导出浮层', !!$('exportMenu'));
+  ok('浮层默认收起', $('exportMenu').hidden === true);
+
+  click($('btnExport'));
+  await tick(40);
+  ok('点一下展开浮层', $('exportMenu').hidden === false);
+  ok('展开时 aria-expanded=true', $('btnExport').getAttribute('aria-expanded') === 'true');
+
+  // 浮层里那几项都必须点了有反应、不报错
+  const before = errors.length;
+  for (const id of ['miPng', 'miPrint', 'miCsv']) {
+    click($('btnExport'));      // 重新展开（点完一项会自动收起）
+    await tick(30);
+    click($(id));
+    await tick(60);
+    ok('浮层项 ' + id + ' 点了不报错', errors.length === before, errors.slice(before).join(' || '));
+    ok('点 ' + id + ' 后浮层自动收起', $('exportMenu').hidden === true);
+  }
+
+  // 重复的旧入口必须已经清掉
+  ok('没有旧的顶栏导出按钮', !$('btnExportPng') && !$('btnPrint') && !$('btnSaveProject'));
+  ok('没有工具栏的「导出 PNG」', !$('btnExportPng2'));
+  ok('没有手机专用的导出按钮', !$('btnExportPngM') && !$('btnPrintM') && !$('btnExportMore'));
+  ok('没有抽屉里的重复导出分区', !$('sectMobileExport'));
+}
+
+console.log('\n刻度防重叠（编辑器画出来的真实坐标）');
+{
+  const ed = window.__editorForTest;
+  if (ed) {
+    ed.replaceGrid({ w: 87, h: 87, cells: new Int16Array(87 * 87).fill(-1) }, { label: 'ruler' });
+    // 直接调 _drawRulers，抓住所有 fillText
+    const calls = [];
+    const fake = {
+      font: '', fillStyle: '', textAlign: '', textBaseline: '',
+      save() {}, restore() {}, beginPath() {}, moveTo() {}, lineTo() {}, stroke() {},
+      fillRect() {}, fillText(t, x, y) { calls.push({ t: String(t), x, y }); },
+    };
+    ed.cssW = 1200; ed.cssH = 900;
+    ed._drawRulers(fake, 36, 22, 4, 0, 87, 0, 87);
+    const top = calls.filter((c) => Math.abs(c.y - 11) < 2).sort((a, b) => a.x - b.x);
+    let min = Infinity, pair = '';
+    for (let i = 1; i < top.length; i++) {
+      const d = top[i].x - top[i - 1].x;
+      if (d < min) { min = d; pair = top[i - 1].t + '↔' + top[i].t; }
+    }
+    ok('小缩放下刻度不重叠（这就是截图里 29/31 糊在一起的问题）',
+      top.length < 2 || min >= 16, '最小间距 ' + min + (pair ? '，最挤 ' + pair : ''));
+    ok('29 和 31 没有同时出现', !(top.some((c) => c.t === '29') && top.some((c) => c.t === '31')));
   }
 }
 

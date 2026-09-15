@@ -40,6 +40,12 @@ await new Promise((r) => setTimeout(r, 800));
 const ed = window.__editorForTest;
 const doc = window.document;
 const tick = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/** 按 P 键切换预览 / 编辑模式（原来工具栏上有按钮，现在只剩快捷键） */
+function pressP(win) {
+  win.dispatchEvent(new win.KeyboardEvent('keydown', { key: 'p', bubbles: true, cancelable: true }));
+}
+
 const cv = doc.getElementById('grid');
 cv.getBoundingClientRect = () => ({ left: 0, top: 0, width: 800, height: 600, right: 800, bottom: 600, x: 0, y: 0 });
 const pe = (t, id, x, y, type) => {
@@ -50,7 +56,7 @@ const pe = (t, id, x, y, type) => {
 let pass = 0, fail = 0;
 const ok = (name, cond, info) => { if (cond) { pass++; console.log('  ✓ ' + name); } else { fail++; console.log('  ✗ ' + name + (info ? ' → ' + info : '')); } };
 
-doc.getElementById('modeEdit').dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+pressP(window);
 await tick(40);
 
 function fresh() {
